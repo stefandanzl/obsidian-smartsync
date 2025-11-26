@@ -47,6 +47,11 @@ export class FileTreeModal extends Modal {
         const statusBar = basicSection.createDiv({ cls: "webdav-status-bar clickable" });
         const statusText = statusBar.createSpan({ cls: "webdav-status-text" });
         statusText.setText("Ready");
+        statusText.setCssStyles({
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+        });
 
         statusBar.addEventListener("click", () => {
             this.plugin.operations.test();
@@ -79,18 +84,6 @@ export class FileTreeModal extends Modal {
         });
 
         /**
-         * Webdav Settings Button
-         */
-        const openSettingsButton = basicSection.createEl("button", {
-            text: "⚙️ SETTINGS",
-            cls: ["mod-cta", "webdav-button"],
-        });
-        openSettingsButton.addEventListener("click", () => {
-            this.plugin.settingPrivate.openTabById(PLUGIN_ID);
-            this.plugin.settingPrivate.open();
-        });
-
-        /**
          * ADVANCED Button
          */
         const advancedButton = basicSection.createEl("button", {
@@ -100,6 +93,8 @@ export class FileTreeModal extends Modal {
         advancedButton.addEventListener("click", async () => {
             if (advancedEnabled) {
                 this.plugin.show("Advanced Actions Buttons already enabled.");
+                advancedEnabled = false;
+                advancedSection.style.display = "none";
                 return;
             }
             this.plugin.show("Warning! Use Advanced Actions carefully!");
@@ -107,83 +102,95 @@ export class FileTreeModal extends Modal {
 
             // Show advanced section
             advancedSection.style.display = "block";
+        });
 
-            /**
-             * PAUSE Button
-             */
-            const pauseButton = advancedSection.createEl("button", {
-                text: `⏸️ PAUSE ${Status.PAUSE}`,
-                cls: ["mod-cta", "webdav-button"],
-            });
-            pauseButton.addEventListener("click", () => {
-                this.plugin.show("Toggling Pause");
-                this.plugin.togglePause();
-            });
+        /**
+         * Webdav Settings Button
+         */
+        const openSettingsButton = advancedSection.createEl("button", {
+            text: "⚙️ SETTINGS",
+            cls: ["mod-cta", "webdav-button"],
+        });
+        openSettingsButton.addEventListener("click", () => {
+            this.plugin.settingPrivate.openTabById(PLUGIN_ID);
+            this.plugin.settingPrivate.open();
+        });
 
-            /**
-             * ERROR Button
-             */
-            const errorButton = advancedSection.createEl("button", {
-                text: `🚨 ERROR ${Status.ERROR}`,
-                cls: ["mod-cta", "webdav-button"],
-                title: "Clear the error status in your previous data storage",
-            });
-            errorButton.addEventListener("click", () => {
-                this.plugin.show("Resetting Error status");
-                this.plugin.prevData.error = false;
-                this.plugin.setStatus(Status.NONE);
-            });
+        /**
+         * PAUSE Button
+         */
+        const pauseButton = advancedSection.createEl("button", {
+            text: `⏸️ PAUSE ${Status.PAUSE}`,
+            cls: ["mod-cta", "webdav-button"],
+        });
+        pauseButton.addEventListener("click", () => {
+            this.plugin.show("Toggling Pause");
+            this.plugin.togglePause();
+        });
 
-            /**
-             * SAVE Button
-             */
-            const saveButton = advancedSection.createEl("button", {
-                text: `💾 SAVE ${Status.SAVE}`,
-                cls: ["mod-cta", "webdav-button"],
-            });
-            saveButton.addEventListener("click", () => {
-                this.plugin.show("Saving current vault file state for future synchronisation actions");
-                this.plugin.saveState();
-            });
+        /**
+         * ERROR Button
+         */
+        const errorButton = advancedSection.createEl("button", {
+            text: `🚨 ERROR ${Status.ERROR}`,
+            cls: ["mod-cta", "webdav-button"],
+            title: "Clear the error status in your previous data storage",
+        });
+        errorButton.addEventListener("click", () => {
+            this.plugin.show("Resetting Error status");
+            this.plugin.prevData.error = false;
+            this.plugin.setStatus(Status.NONE);
+        });
 
-            /**
-             * PULL Button
-             */
-            const pullButton = advancedSection.createEl("button", {
-                text: `⬇️ PULL ${Status.PULL}`,
-                cls: ["mod-cta", "webdav-button"],
-            });
-            pullButton.addEventListener("click", async () => {
-                this.plugin.operations.pull();
-            });
+        /**
+         * SAVE Button
+         */
+        const saveButton = advancedSection.createEl("button", {
+            text: `💾 SAVE ${Status.SAVE}`,
+            cls: ["mod-cta", "webdav-button"],
+        });
+        saveButton.addEventListener("click", () => {
+            this.plugin.show("Saving current vault file state for future synchronisation actions");
+            this.plugin.saveState();
+        });
 
-            /**
-             * PUSH Button
-             */
-            const pushButton = advancedSection.createEl("button", {
-                text: `⬆️ PUSH ${Status.PUSH}`,
-                cls: ["mod-cta", "webdav-button"],
-            });
-            pushButton.addEventListener("click", async () => {
-                // this.plugin.show("Pushing files to server ...")
-                this.plugin.operations.push();
-            });
+        /**
+         * PULL Button
+         */
+        const pullButton = advancedSection.createEl("button", {
+            text: `⬇️ PULL ${Status.PULL}`,
+            cls: ["mod-cta", "webdav-button"],
+        });
+        pullButton.addEventListener("click", async () => {
+            this.plugin.operations.pull();
+        });
 
-            const dupLocalBtn = advancedSection.createEl("button", {
-                text: `📋 DUPLICATE LOCAL`,
-                cls: ["mod-cta", "webdav-button", "button-danger"],
-            });
-            dupLocalBtn.addEventListener("click", async () => {
-                await this.plugin.operations.duplicateLocal();
-            });
+        /**
+         * PUSH Button
+         */
+        const pushButton = advancedSection.createEl("button", {
+            text: `⬆️ PUSH ${Status.PUSH}`,
+            cls: ["mod-cta", "webdav-button"],
+        });
+        pushButton.addEventListener("click", async () => {
+            // this.plugin.show("Pushing files to server ...")
+            this.plugin.operations.push();
+        });
 
-            const dupWebBtn = advancedSection.createEl("button", {
-                text: `🌐 DUPLICATE WEBDAV`,
-                cls: ["mod-cta", "webdav-button", "button-danger"],
-            });
-            dupWebBtn.addEventListener("click", async () => {
-                await this.plugin.operations.duplicateWebdav();
-            });
+        const dupLocalBtn = advancedSection.createEl("button", {
+            text: `📋 DUPLICATE LOCAL`,
+            cls: ["mod-cta", "webdav-button", "button-danger"],
+        });
+        dupLocalBtn.addEventListener("click", async () => {
+            await this.plugin.operations.duplicateLocal();
+        });
+
+        const dupWebBtn = advancedSection.createEl("button", {
+            text: `🌐 DUPLICATE WEBDAV`,
+            cls: ["mod-cta", "webdav-button", "button-danger"],
+        });
+        dupWebBtn.addEventListener("click", async () => {
+            await this.plugin.operations.duplicateWebdav();
         });
 
         const containDiv = mainDiv.createDiv({ cls: "webdav-content" });
@@ -202,7 +209,7 @@ export class FileTreeModal extends Modal {
                 [Status.ERROR]: "Error occurred",
                 [Status.PULL]: "Pulling files...",
                 [Status.PUSH]: "Pushing files...",
-                [Status.PAUSE]: "Paused"
+                [Status.PAUSE]: "Paused",
             };
 
             statusText.setText(`${status} ${statusMessages[status] || "Unknown status"}`);
@@ -268,46 +275,63 @@ export class FileTreeModal extends Modal {
         function getFileIcon(path: string): string {
             if (path.endsWith("/")) return "📁";
 
-            const ext = path.split('.').pop()?.toLowerCase();
+            const ext = path.split(".").pop()?.toLowerCase();
             switch (ext) {
-                case 'md': return "📝";
-                case 'txt': return "📄";
-                case 'pdf': return "📕";
-                case 'png':
-                case 'jpg':
-                case 'jpeg':
-                case 'gif':
-                case 'svg': return "🖼️";
-                case 'mp3':
-                case 'wav':
-                case 'ogg': return "🎵";
-                case 'mp4':
-                case 'avi':
-                case 'mov': return "🎬";
-                case 'zip':
-                case 'rar':
-                case '7z': return "📦";
-                case 'js':
-                case 'ts':
-                case 'jsx':
-                case 'tsx': return "🟨";
-                case 'py': return "🐍";
-                case 'java': return "☕";
-                case 'cpp':
-                case 'c':
-                case 'h': return "🔧";
-                default: return "📄";
+                case "md":
+                    return "📝";
+                case "txt":
+                    return "📄";
+                case "pdf":
+                    return "📕";
+                case "png":
+                case "jpg":
+                case "jpeg":
+                case "gif":
+                case "svg":
+                    return "🖼️";
+                case "mp3":
+                case "wav":
+                case "ogg":
+                    return "🎵";
+                case "mp4":
+                case "avi":
+                case "mov":
+                    return "🎬";
+                case "zip":
+                case "rar":
+                case "7z":
+                    return "📦";
+                case "js":
+                case "ts":
+                case "jsx":
+                case "tsx":
+                    return "🟨";
+                case "py":
+                    return "🐍";
+                case "java":
+                    return "☕";
+                case "cpp":
+                case "c":
+                case "h":
+                    return "🔧";
+                default:
+                    return "📄";
             }
         }
 
         // Helper function to get section icon
         function getSectionIcon(type: string): string {
             switch (type.toLowerCase()) {
-                case 'added': return "➕";
-                case 'deleted': return "🗑️";
-                case 'modified': return "✏️";
-                case 'except': return "⚠️";
-                default: return "📄";
+                case "added":
+                    return "➕";
+                case "deleted":
+                    return "🗑️";
+                case "modified":
+                    return "✏️";
+                case "except":
+                    return "⚠️";
+                default:
+                    return "📄";
             }
         }
 
