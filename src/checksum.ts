@@ -175,6 +175,14 @@ export class Checksum {
 
         this.plugin.log(fileCache);
 
+        // Initialize statistics for this run
+        const hashStats = {
+            totalFiles: 0,
+            cachedHashes: 0,
+            calculatedHashes: 0,
+            skippedFiles: 0
+        };
+
         await Promise.all(
             localTFiles.map(async (element) => {
                 // const filePath = element.path
@@ -182,7 +190,9 @@ export class Checksum {
                     // console.log("FILE",element)
                     if (element instanceof TFile) {
                         const filePath = element.path;
+                        hashStats.totalFiles++;
                         if (exclude && this.isExcluded(filePath)) {
+                            hashStats.skippedFiles++;
                             return;
                         }
                         if (fileCache && filePath.endsWith(".md")) {
@@ -192,6 +202,7 @@ export class Checksum {
                                     throw new Error("empty fileCache");
                                 }
                                 this.localFiles[filePath] = cacheHash;
+                                hashStats.cachedHashes++;
                                 return;
                             } catch (error) {
                                 console.error("fileCache Error", element, error);
@@ -199,6 +210,7 @@ export class Checksum {
                         }
                         const content = await this.plugin.app.vault.readBinary(element);
                         this.localFiles[filePath] = await sha256(content);
+                        hashStats.calculatedHashes++;
                         return;
                     } else if (element instanceof TFolder) {
                         const filePath = element.path + "/";
@@ -220,6 +232,22 @@ export class Checksum {
         this.localFiles[configDir + "/"] = "";
         await this.getHiddenLocalFiles(configDir, exclude);
         // }
+
+        // Store statistics in plugin for access from operations
+        if (!this.plugin.hashStats) {
+            this.plugin.hashStats = {
+                local: {
+                    totalFiles: 0,
+                    cachedHashes: 0,
+                    calculatedHashes: 0,
+                    skippedFiles: 0
+                }
+            };
+        }
+        this.plugin.hashStats.local = hashStats;
+
+        this.plugin.log(`LOCAL HASH STATISTICS: ${JSON.stringify(hashStats, null, 2)}`);
+
         if (exclude) {
             this.plugin.localFiles = this.localFiles;
         }

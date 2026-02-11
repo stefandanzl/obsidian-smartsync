@@ -53,6 +53,14 @@ export default class Cloudr extends Plugin {
     mobile: boolean;
     localFiles: FileList;
     webdavFiles: FileList;
+    hashStats: {
+        local: {
+            totalFiles: number;
+            cachedHashes: number;
+            calculatedHashes: number;
+            skippedFiles: number;
+        };
+    };
 
     loadingTotal: number;
     loadingProcessed: number;

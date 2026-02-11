@@ -305,8 +305,31 @@ export class Operations {
         show && this.plugin.show(`${Status.CHECK} Checking ...`);
 
         let response;
+        const stats = {
+            startTime: Date.now(),
+            testTime: 0,
+            webdavScanTime: 0,
+            localScanTime: 0,
+            compareTime: 0,
+            totalTime: 0,
+            fileCounts: {
+                webdav: 0,
+                local: 0
+            },
+            hashStats: {
+                totalFiles: 0,
+                cachedHashes: 0,
+                calculatedHashes: 0,
+                skippedFiles: 0
+            }
+        };
+
         try {
+            // Test connection
+            const testStart = Date.now();
             response = await this.test(false, true);
+            stats.testTime = Date.now() - testStart;
+
             if (!response) {
                 // throw new Error("Testing failed, can't continue Check action!");
                 show &&
@@ -318,26 +341,68 @@ export class Operations {
 
             this.plugin.checkTime = Date.now();
 
+            // Generate file hash trees with timing
+            const webdavStart = Date.now();
             const webdavPromise = this.plugin.checksum.generateWebdavHashTree(
                 this.plugin.webdavClient,
                 this.plugin.baseWebdav,
                 this.plugin.settings.exclusions
             );
-            // default true
+
+            const localStart = Date.now();
             const localPromise = this.plugin.checksum.generateLocalHashTree(exclude);
+            stats.localScanTime = Date.now() - localStart;
 
             const [webdavFiles, localFiles] = await Promise.all([webdavPromise, localPromise]);
+            stats.webdavScanTime = Date.now() - webdavStart;
+            stats.fileCounts.webdav = Object.keys(webdavFiles).length;
+            stats.fileCounts.local = Object.keys(localFiles).length;
 
+            // Update hash statistics from checksum
+            if (this.plugin.hashStats && this.plugin.hashStats.local) {
+                stats.hashStats = this.plugin.hashStats.local;
+            }
+
+            // Compare file trees
+            const compareStart = Date.now();
             this.plugin.allFiles.local = localFiles;
             this.plugin.allFiles.webdav = webdavFiles;
-
             this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(webdavFiles, localFiles);
+            stats.compareTime = Date.now() - compareStart;
+
             const ok = this.dangerCheck();
 
             this.plugin.fullFileTrees = structuredClone(this.plugin.fileTrees);
             // if (this.plugin.modal) {
             //     this.plugin.modal.fileTreeDiv.setText(JSON.stringify(this.plugin.fileTrees, null, 2));
             // }
+
+            // Calculate total time
+            stats.totalTime = Date.now() - stats.startTime;
+
+            // Log performance statistics
+            console.log(`=== CHECK PERFORMANCE STATISTICS ===`);
+            console.log(`Total time: ${stats.totalTime}ms`);
+            console.log(`Connection test: ${stats.testTime}ms`);
+            console.log(`WebDAV scan: ${stats.webdavScanTime}ms (${stats.fileCounts.webdav} files)`);
+            console.log(`Local scan: ${stats.localScanTime}ms (${stats.fileCounts.local} files)`);
+            console.log(`Comparison: ${stats.compareTime}ms`);
+            console.log(`Files per second (WebDAV): ${Math.round((stats.fileCounts.webdav / stats.webdavScanTime) * 1000)}`);
+            console.log(`Files per second (Local): ${Math.round((stats.fileCounts.local / stats.localScanTime) * 1000)}`);
+
+            // Log hash statistics
+            if (stats.hashStats) {
+                const hashPercentage = stats.hashStats.totalFiles > 0
+                    ? Math.round((stats.hashStats.cachedHashes / stats.hashStats.totalFiles) * 100)
+                    : 0;
+                console.log(`\n=== HASH OPTIMIZATION STATISTICS ===`);
+                console.log(`Total files processed: ${stats.hashStats.totalFiles}`);
+                console.log(`Hashes from cache: ${stats.hashStats.cachedHashes} (${hashPercentage}%)`);
+                console.log(`Hashes calculated: ${stats.hashStats.calculatedHashes}`);
+                console.log(`Files skipped (excluded): ${stats.hashStats.skippedFiles}`);
+                console.log(`Cache efficiency: ${hashPercentage}% - Higher is better!`);
+                console.log(`===============================`);
+            }
 
             // show && (fileTreesEmpty(this.plugin.fileTrees) ? null : this.plugin.show("Finished checking files"));
             show && ok && this.plugin.show(`Finished checking files after ${calcDuration(this.plugin.checkTime)} s`);

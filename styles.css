@@ -11,20 +11,25 @@ overflow-y: auto;
 }
 
 .webdav-container {
+    position: relative;
     display: flex;
     flex-direction: row-reverse;
     gap: 12px;
     margin: 0;
-    /* padding: 20px; */
+    padding: 20px;
     min-height: 400px;
     max-height: 80vh;
 }
 
 .webdav-button-container {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    bottom: 20px;
+    width: 180px;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: 180px;
     flex-shrink: 0;
     padding: 6px;
     background: var(--background-secondary);
@@ -35,6 +40,7 @@ overflow-y: auto;
 
 .webdav-content {
     flex: 1;
+    margin-right: 200px;
     overflow: hidden;
     height: 100%;
     display: flex;
