@@ -73,37 +73,7 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                     .setButtonText(this.plugin.prevData.error ? "FAIL" : "OK")
             );
 
-        new Setting(containerEl)
-            .setName("Remote Base Directory")
-            .setDesc("Enter your Server's Base Directory - your Vault will be synced inside of it")
-            .addText((text) =>
-                text
-                    .setPlaceholder("/")
-                    .setValue(this.plugin.settings.remoteBasePath)
-                    .onChange(async (value) => {
-                        this.plugin.settings.remoteBasePath = value.replace(/\\/g, "/");
-                        await this.plugin.saveSettings();
-                        await this.plugin.setBaseRemotePath();
-                        this.plugin.operations.test();
-                        await this.plugin.saveSettings();
-                    })
-            );
 
-        new Setting(containerEl)
-            .setName("Override remote Vault Name")
-            .setDesc("Use only if remote Vault's name differs from this")
-            .addText((text) =>
-                text
-                    .setPlaceholder("vaultname")
-                    .setValue(this.plugin.settings.overrideVault)
-                    .onChange(async (value) => {
-                        this.plugin.settings.overrideVault = value.replace(/\\/g, "/");
-                        await this.plugin.saveSettings();
-                        await this.plugin.setBaseRemotePath();
-                        // this.plugin.test()
-                        await this.plugin.saveSettings();
-                    })
-            );
 
         new Setting(containerEl)
             .setName("Excluded Directories")

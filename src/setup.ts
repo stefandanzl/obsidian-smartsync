@@ -28,7 +28,6 @@ export async function launcher(plugin: SmartSync) {
 
     plugin.mobile = Platform.isMobileApp;
     plugin.settings.exclusionsOverride = false;
-    plugin.setBaseRemotePath();
     plugin.prevPath = `${plugin.app.vault.configDir}/plugins/smartSync/prevdata.json`;
     // console.log(plugin.prevPath)
 

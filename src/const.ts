@@ -167,8 +167,6 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
     port: 443,
     authToken: "",
 
-    remoteBasePath: "",
-    overrideVault: "",
     exclusions: {
         directories: [],
         extensions: [".exe"],
@@ -193,8 +191,6 @@ export interface SmartSyncSettings {
     url: string;
     port: number;
     authToken: string;
-    remoteBasePath: string;
-    overrideVault: string;
     exclusions: Exclusions;
     exclusionsOverride: boolean;
 

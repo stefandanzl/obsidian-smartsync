@@ -7,7 +7,18 @@ import { Compare } from "./compare";
 import { Operations } from "./operations";
 import { join, sha256 } from "./util";
 import { launcher } from "./setup";
-import { FileList, PreviousObject, Status, SmartSyncSettings, DEFAULT_SETTINGS, STATUS_ITEMS, FileTrees, Hash, Location, Type } from "./const";
+import {
+    FileList,
+    PreviousObject,
+    Status,
+    SmartSyncSettings,
+    DEFAULT_SETTINGS,
+    STATUS_ITEMS,
+    FileTrees,
+    Hash,
+    Location,
+    Type,
+} from "./const";
 import { DailyNoteManager } from "./dailynote";
 
 export default class SmartSync extends Plugin {
@@ -27,7 +38,7 @@ export default class SmartSync extends Plugin {
     statusBar2: HTMLElement;
     iconSpan: HTMLSpanElement;
     modal: FileTreeModal;
-    baseRemotePath: string;
+    baseRemotePath: string = "";
     showModal: boolean;
     smartSyncClient: SmartSyncClient;
     fileTrees: FileTrees;
@@ -96,15 +107,6 @@ export default class SmartSync extends Plugin {
             this.show("Error creating SmartSync Client!");
             this.prevData;
         }
-    }
-
-    async setBaseRemotePath() {
-        if (this.settings.overrideVault) {
-            this.baseRemotePath = join(this.settings.remoteBasePath, this.settings.overrideVault).replace(/\\/g, "/");
-        } else {
-            this.baseRemotePath = join(this.settings.remoteBasePath, this.app.vault.getName()).replace(/\\/g, "/");
-        }
-        this.log("Base remote: ", this.baseRemotePath);
     }
 
     async setAutoSync() {

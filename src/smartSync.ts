@@ -59,14 +59,25 @@ export class SmartSyncClient {
      * Check if server is online and get file count
      */
     async getStatus(): Promise<StatusResponse> {
-        const response = await requestUrl({
-            url: this.createFullUrl("/status"),
-            method: "GET",
-            headers: {
-                ...(this.createAuthHeader() ? { Authorization: this.createAuthHeader() } : {}),
-            },
-        });
-        return response.json;
+        try {
+            const response = await requestUrl({
+                url: this.createFullUrl("/status"),
+                method: "GET",
+                headers: {
+                    ...(this.createAuthHeader() ? { Authorization: this.createAuthHeader() } : {}),
+                },
+            });
+            console.log("SmartSync getStatus response:", response.status, response.json);
+            // Validate response structure
+            if (!response.json || typeof response.json.online !== 'boolean') {
+                console.error("Invalid status response structure:", response.json);
+                return { online: false, file_count: 0 };
+            }
+            return response.json;
+        } catch (error) {
+            console.error("SmartSync getStatus error:", error);
+            return { online: false, file_count: 0 };
+        }
     }
 
     /**

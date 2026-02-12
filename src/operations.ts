@@ -247,16 +247,21 @@ export class Operations {
     }
 
     async test(show = true) {
+        console.log("[TEST] Starting connection test, show:", show);
         try {
             this.plugin.setStatus(Status.TEST);
             show && this.plugin.show(`${Status.TEST} Testing ...`);
 
+            console.log("[TEST] Getting server status...");
             const status = await this.plugin.smartSyncClient.getStatus();
-            this.plugin.log("STATUS: ", status);
+            console.log("[TEST] Server status response:", status);
 
-            if (status.online) {
+            // Check if online field exists and is true
+            if (status && status.online === true) {
+                console.log("[TEST] Connection successful!");
                 show && this.plugin.show("Connection successful");
-                show && this.plugin.setStatus(Status.NONE);
+                // ALWAYS set status to NONE after successful test, regardless of show parameter
+                this.plugin.setStatus(Status.NONE);
 
                 if (this.plugin.prevData.error) {
                     this.plugin.show("Clear your ERROR state manually!");
@@ -264,11 +269,13 @@ export class Operations {
                 }
                 return true;
             }
-            show && this.plugin.show("Connection failed");
+            console.log("[TEST] Connection failed, status.online:", status?.online);
+            show && this.plugin.show("Connection failed: Server is offline");
             this.plugin.setStatus(Status.OFFLINE);
 
             return false;
         } catch (error) {
+            console.error("[TEST] Connection test failed with error:", error);
             show && this.plugin.show(`SmartSync connection test failed. Error: ${error}`);
             console.error("Failed miserably", error);
             this.plugin.setStatus(Status.ERROR);
@@ -417,16 +424,21 @@ export class Operations {
      * @returns
      */
     async sync(controller: Controller, show = true) {
+        console.log("[SYNC] Starting sync, show:", show, "controller:", controller);
         if (this.plugin.prevData.error) {
+            console.log("[SYNC] Blocked by error state");
             show && this.plugin.show("Error detected - please clear in control panel or force action by retriggering action");
             return;
         }
 
         try {
+            console.log("[SYNC] Testing connection...");
             if (!(await this.test(false))) {
+                console.log("[SYNC] Connection test failed, aborting sync");
                 show && this.plugin.show("Connection Problem detected!");
                 return;
             }
+            console.log("[SYNC] Connection test passed, current status:", this.plugin.status);
 
             if (this.plugin.status !== Status.NONE) {
                 show && this.plugin.show(`Operation not possible, currently working on '${this.plugin.status}'`);
