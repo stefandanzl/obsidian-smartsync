@@ -13,7 +13,7 @@ interface ConcurrencyProcessor {
 }
 
 export class Checksum {
-    remoteFiles: FileList = {};
+    allLocalFiles: FileList = {};
 
     constructor(public plugin: SmartSyncPlugin) {
         this.plugin = plugin;
@@ -103,7 +103,7 @@ export class Checksum {
                 }
 
                 const data = await this.plugin.app.vault.adapter.readBinary(file);
-                this.remoteFiles[file] = await sha256(data);
+                this.allLocalFiles[file] = await sha256(data);
             } catch (error) {
                 console.error(`Error processing file ${file}:`, error);
             }
@@ -118,7 +118,7 @@ export class Checksum {
             }
 
             try {
-                this.remoteFiles[folderPath] = "";
+                this.allLocalFiles[folderPath] = "dir";
                 await this.getHiddenLocalFiles(normalizePath(folder), exclude, concurrency);
             } catch (error) {
                 console.error(`Error processing folder ${folder}:`, error);
@@ -139,7 +139,7 @@ export class Checksum {
      * @function generateLocalHashTree
      */
     generateLocalHashTree = async (exclude: boolean) => {
-        this.remoteFiles = {};
+        this.allLocalFiles = {};
 
         const localTFiles: TAbstractFile[] = this.plugin.app.vault.getAllLoadedFiles();
 
@@ -153,7 +153,7 @@ export class Checksum {
             totalFiles: 0,
             cachedHashes: 0,
             calculatedHashes: 0,
-            skippedFiles: 0
+            skippedFiles: 0,
         };
 
         await Promise.all(
@@ -172,7 +172,7 @@ export class Checksum {
                                 if (!cacheHash) {
                                     throw new Error("empty fileCache");
                                 }
-                                this.remoteFiles[filePath] = cacheHash;
+                                this.allLocalFiles[filePath] = cacheHash;
                                 hashStats.cachedHashes++;
                                 return;
                             } catch (error) {
@@ -180,7 +180,7 @@ export class Checksum {
                             }
                         }
                         const content = await this.plugin.app.vault.readBinary(element);
-                        this.remoteFiles[filePath] = await sha256(content);
+                        this.allLocalFiles[filePath] = await sha256(content);
                         hashStats.calculatedHashes++;
                         return;
                     } else if (element instanceof TFolder) {
@@ -188,7 +188,7 @@ export class Checksum {
                         if ((exclude && this.isExcluded(filePath)) || filePath === "//") {
                             return;
                         }
-                        this.remoteFiles[filePath] = "";
+                        this.allLocalFiles[filePath] = "dir";
                     } else {
                         console.error("NEITHER FILE NOR FOLDER? ", element);
                     }
@@ -198,7 +198,7 @@ export class Checksum {
             })
         );
         const configDir = this.plugin.app.vault.configDir;
-        this.remoteFiles[configDir + "/"] = "";
+        this.allLocalFiles[configDir + "/"] = "dir";
         await this.getHiddenLocalFiles(configDir, exclude);
 
         // Store statistics in plugin for access from operations
@@ -208,8 +208,8 @@ export class Checksum {
                     totalFiles: 0,
                     cachedHashes: 0,
                     calculatedHashes: 0,
-                    skippedFiles: 0
-                }
+                    skippedFiles: 0,
+                },
             };
         }
         this.plugin.hashStats.local = hashStats;
@@ -217,18 +217,23 @@ export class Checksum {
         this.plugin.log(`LOCAL HASH STATISTICS: ${JSON.stringify(hashStats, null, 2)}`);
 
         if (exclude) {
-            this.plugin.localFiles = this.remoteFiles;
+            this.plugin.localFiles = this.allLocalFiles;
         }
-        return this.remoteFiles;
+
+        // Log the local hash tree
+        this.plugin.log("=== LOCAL HASH TREE ===");
+        this.plugin.log(JSON.stringify(this.allLocalFiles, null, 2));
+        this.plugin.log(`=== END LOCAL HASH TREE (${Object.keys(this.allLocalFiles).length} files) ===`);
+
+        return this.allLocalFiles;
     };
 
     /**
      * Fetch checksums from SmartSyncServer
      * @param smartSyncClient - The SmartSync client instance
-     * @param basePath - The base remote path to prepend to file paths
      * @returns Hash tree of remote files
      */
-    generateRemoteHashTree = async (smartSyncClient: SmartSyncClient, basePath: string): Promise<FileList> => {
+    generateRemoteHashTree = async (smartSyncClient: SmartSyncClient): Promise<FileList> => {
         try {
             // Check if server is online
             const status = await smartSyncClient.getStatus();
@@ -245,17 +250,21 @@ export class Checksum {
 
             // Convert checksums object to FileList format
             // SmartSyncServer returns: { checksums: { "path/to/file": "hash123", ... }, file_count: N }
+            // Server now returns full vault paths like "/My Notes/test.md"
             const remoteHashTree: FileList = {};
 
             for (const [filePath, checksum] of Object.entries(response.checksums)) {
-                // Store relative paths only (remove base path if present)
-                const relativePath = filePath.startsWith(basePath)
-                    ? filePath.substring(basePath.length).replace(/^\//, "")
-                    : filePath;
-                remoteHashTree[relativePath] = checksum;
+                // Store paths as-is from server (full vault paths included)
+                remoteHashTree[filePath] = checksum;
             }
 
             this.plugin.remoteFiles = remoteHashTree;
+
+            // Log the remote hash tree
+            this.plugin.log("=== REMOTE HASH TREE ===");
+            this.plugin.log(JSON.stringify(remoteHashTree, null, 2));
+            this.plugin.log(`=== END REMOTE HASH TREE (${Object.keys(remoteHashTree).length} files) ===`);
+
             return remoteHashTree;
         } catch (error) {
             console.error("Error:", error);

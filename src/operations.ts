@@ -54,7 +54,7 @@ export class Operations {
                 return true;
             }
 
-            const remotePath = join(this.plugin.baseRemotePath, filePath);
+            const remotePath = filePath;
 
             // Verify remote file exists by checking if server is online
             const status = await this.plugin.smartSyncClient.getStatus();
@@ -134,7 +134,7 @@ export class Operations {
             }
 
             const fileContent = await this.plugin.app.vault.adapter.readBinary(normalizePath(localFilePath));
-            const remoteFilePath = join(this.plugin.baseRemotePath, localFilePath);
+            const remoteFilePath = localFilePath;
 
             await this.plugin.smartSyncClient.uploadFile(remoteFilePath, fileContent);
             this.plugin.processed();
@@ -309,14 +309,14 @@ export class Operations {
             totalTime: 0,
             fileCounts: {
                 remote: 0,
-                local: 0
+                local: 0,
             },
             hashStats: {
                 totalFiles: 0,
                 cachedHashes: 0,
                 calculatedHashes: 0,
-                skippedFiles: 0
-            }
+                skippedFiles: 0,
+            },
         };
 
         try {
@@ -337,10 +337,7 @@ export class Operations {
 
             // Generate file hash trees with timing
             const remoteStart = Date.now();
-            const remotePromise = this.plugin.checksum.generateRemoteHashTree(
-                this.plugin.smartSyncClient,
-                this.plugin.baseRemotePath
-            );
+            const remotePromise = this.plugin.checksum.generateRemoteHashTree(this.plugin.smartSyncClient);
 
             const localStart = Date.now();
             const localPromise = this.plugin.checksum.generateLocalHashTree(exclude);
@@ -382,9 +379,8 @@ export class Operations {
 
             // Log hash statistics
             if (stats.hashStats) {
-                const hashPercentage = stats.hashStats.totalFiles > 0
-                    ? Math.round((stats.hashStats.cachedHashes / stats.hashStats.totalFiles) * 100)
-                    : 0;
+                const hashPercentage =
+                    stats.hashStats.totalFiles > 0 ? Math.round((stats.hashStats.cachedHashes / stats.hashStats.totalFiles) * 100) : 0;
                 console.log(`\n=== HASH OPTIMIZATION STATISTICS ===`);
                 console.log(`Total files processed: ${stats.hashStats.totalFiles}`);
                 console.log(`Hashes from cache: ${stats.hashStats.cachedHashes} (${hashPercentage}%)`);
