@@ -1,8 +1,8 @@
-import { WebDAVClient } from "./webdav";
-import Cloudr from "./main";
+import { SmartSyncClient, ChecksumsResponse } from "./smartSync";
+import SmartSyncPlugin from "./main";
 import { extname, sha256 } from "./util";
 import { TAbstractFile, TFile, TFolder, normalizePath } from "obsidian";
-import { FileList, WebDAVDirectoryItem, Exclusions } from "./const";
+import { FileList, Exclusions } from "./const";
 
 interface FileProcessor {
     (file: string): Promise<void>;
@@ -13,35 +13,10 @@ interface ConcurrencyProcessor {
 }
 
 export class Checksum {
-    localFiles: FileList = {};
+    remoteFiles: FileList = {};
 
-    constructor(public plugin: Cloudr) {
+    constructor(public plugin: SmartSyncPlugin) {
         this.plugin = plugin;
-    }
-
-    refineObject(data: WebDAVDirectoryItem[], exclusions: Exclusions) {
-        const refinedObject: FileList = {};
-
-        data.forEach((item) => {
-            // console.log(item)
-            const { filename, props } = item;
-
-            // const isDirectory = type === "directory";
-            // const fullPath = isDirectory ? filename + "/" : filename;
-
-            // const fullPath = filename;
-
-            if (this.isExcluded(filename)) {
-                return; // Skip excluded files and folders
-            }
-            if (props && props.checksum) {
-                const checksum = props.checksum;
-                refinedObject[filename] = checksum;
-            } else {
-                refinedObject[filename] = "";
-            }
-        });
-        return refinedObject;
     }
 
     // returns true if is excluded and false if is included
@@ -96,13 +71,13 @@ export class Checksum {
         const removedBase: FileList = {};
 
         for (const [filePath, checksum] of Object.entries(fileChecksums)) {
-            // Check if the file path starts with the base path
+            // Check if file path starts with base path
             if (filePath.startsWith(basePath)) {
-                // Remove the base path from the file path
+                // Remove base path from file path
                 const relativePath: string = filePath.substring(basePath.length).replace(/^\//, "");
                 removedBase[relativePath] = checksum;
             } else {
-                // If the file path doesn't start with the base path, keep it unchanged
+                // If file path doesn't start with base path, keep it unchanged
                 removedBase[filePath] = checksum;
             }
         }
@@ -128,7 +103,7 @@ export class Checksum {
                 }
 
                 const data = await this.plugin.app.vault.adapter.readBinary(file);
-                this.localFiles[file] = await sha256(data);
+                this.remoteFiles[file] = await sha256(data);
             } catch (error) {
                 console.error(`Error processing file ${file}:`, error);
             }
@@ -143,7 +118,7 @@ export class Checksum {
             }
 
             try {
-                this.localFiles[folderPath] = "";
+                this.remoteFiles[folderPath] = "";
                 await this.getHiddenLocalFiles(normalizePath(folder), exclude, concurrency);
             } catch (error) {
                 console.error(`Error processing folder ${folder}:`, error);
@@ -155,18 +130,16 @@ export class Checksum {
     }
 
     /**
-     * Generate a hash tree of the local files
+     * Generate a hash tree of local files
      * @param exclude - Exclude hidden files and folders -
      * is used here also to differentiate when populating prevData
-     * is used in the getHiddenLocalFiles function
-     * @returns Hash tree of the local files
+     * is used in getHiddenLocalFiles function
+     * @returns Hash tree of local files
      * @async
      * @function generateLocalHashTree
      */
     generateLocalHashTree = async (exclude: boolean) => {
-        // const rootFolder = self.basePath;
-        // const checksumTable = {};
-        this.localFiles = {};
+        this.remoteFiles = {};
 
         const localTFiles: TAbstractFile[] = this.plugin.app.vault.getAllLoadedFiles();
 
@@ -185,9 +158,7 @@ export class Checksum {
 
         await Promise.all(
             localTFiles.map(async (element) => {
-                // const filePath = element.path
                 try {
-                    // console.log("FILE",element)
                     if (element instanceof TFile) {
                         const filePath = element.path;
                         hashStats.totalFiles++;
@@ -201,7 +172,7 @@ export class Checksum {
                                 if (!cacheHash) {
                                     throw new Error("empty fileCache");
                                 }
-                                this.localFiles[filePath] = cacheHash;
+                                this.remoteFiles[filePath] = cacheHash;
                                 hashStats.cachedHashes++;
                                 return;
                             } catch (error) {
@@ -209,7 +180,7 @@ export class Checksum {
                             }
                         }
                         const content = await this.plugin.app.vault.readBinary(element);
-                        this.localFiles[filePath] = await sha256(content);
+                        this.remoteFiles[filePath] = await sha256(content);
                         hashStats.calculatedHashes++;
                         return;
                     } else if (element instanceof TFolder) {
@@ -217,7 +188,7 @@ export class Checksum {
                         if ((exclude && this.isExcluded(filePath)) || filePath === "//") {
                             return;
                         }
-                        this.localFiles[filePath] = "";
+                        this.remoteFiles[filePath] = "";
                     } else {
                         console.error("NEITHER FILE NOR FOLDER? ", element);
                     }
@@ -226,12 +197,9 @@ export class Checksum {
                 }
             })
         );
-        // if (!this.plugin.settings.skipHidden) {
         const configDir = this.plugin.app.vault.configDir;
-
-        this.localFiles[configDir + "/"] = "";
+        this.remoteFiles[configDir + "/"] = "";
         await this.getHiddenLocalFiles(configDir, exclude);
-        // }
 
         // Store statistics in plugin for access from operations
         if (!this.plugin.hashStats) {
@@ -249,48 +217,49 @@ export class Checksum {
         this.plugin.log(`LOCAL HASH STATISTICS: ${JSON.stringify(hashStats, null, 2)}`);
 
         if (exclude) {
-            this.plugin.localFiles = this.localFiles;
+            this.plugin.localFiles = this.remoteFiles;
         }
-        return this.localFiles;
+        return this.remoteFiles;
     };
 
-    // Fetch directory contents from webdav
-    generateWebdavHashTree = async (webdavClient: WebDAVClient, rootFolder: string, exclusions: Exclusions): Promise<FileList> => {
+    /**
+     * Fetch checksums from SmartSyncServer
+     * @param smartSyncClient - The SmartSync client instance
+     * @param basePath - The base remote path to prepend to file paths
+     * @returns Hash tree of remote files
+     */
+    generateRemoteHashTree = async (smartSyncClient: SmartSyncClient, basePath: string): Promise<FileList> => {
         try {
-            const exists = await webdavClient.exists(rootFolder);
-            if (exists) {
-                this.plugin.log("ROOTFOLDER DOES EXIST");
-            } else {
-                this.plugin.log("DOES NOT EXIST");
-                await webdavClient.createDirectory(rootFolder);
+            // Check if server is online
+            const status = await smartSyncClient.getStatus();
+            if (!status.online) {
+                throw new Error("SmartSyncServer is offline");
             }
-        } catch (error) {
-            console.error("ERROR: generatessWebdavHashTree", error);
-            // return error;
-        }
 
-        // exclusions.directories = exclusions.directories || [];
-        // exclusions.directories.push("node_modules", ".git", "plugins/remotely-sync", "remotely-sync/src", "obsidian-cloudr");
+            this.plugin.log("Server is online, fetching checksums...");
 
-        try {
-            // Get directory contents - deep true, details true
-            // const contents = await webdavClient.getDirectoryContents(rootFolder, {
-            //   deep: true,
-            //   details: true,
-            // }); //details: true
+            // Get all checksums from SmartSyncServer
+            const response: ChecksumsResponse = await smartSyncClient.getChecksums();
 
-            const contents = await webdavClient.getDirectory(rootFolder, "infinity");
+            this.plugin.log(`Remote checksums received: ${response.file_count} files`);
 
-            const refinedResult = this.refineObject(contents, exclusions);
+            // Convert checksums object to FileList format
+            // SmartSyncServer returns: { checksums: { "path/to/file": "hash123", ... }, file_count: N }
+            const remoteHashTree: FileList = {};
 
-            const webdavHashtree = this.removeBase(refinedResult, rootFolder);
-            // writeFileSync("out/output-webdav2.json", JSON.stringify(refinedResult, null, 2));
-            this.plugin.log("webdav: ", webdavHashtree);
-            this.plugin.webdavFiles = webdavHashtree;
-            return webdavHashtree;
+            for (const [filePath, checksum] of Object.entries(response.checksums)) {
+                // Store relative paths only (remove base path if present)
+                const relativePath = filePath.startsWith(basePath)
+                    ? filePath.substring(basePath.length).replace(/^\//, "")
+                    : filePath;
+                remoteHashTree[relativePath] = checksum;
+            }
+
+            this.plugin.remoteFiles = remoteHashTree;
+            return remoteHashTree;
         } catch (error) {
             console.error("Error:", error);
-            return error;
+            throw error;
         }
     };
 }

@@ -1,5 +1,5 @@
-import Cloudr from "./main";
-import { CloudrSettingsTab } from "./settings";
+import SmartSyncPlugin from "./main";
+import { SmartSyncSettingsTab } from "./settings";
 import { Compare } from "./compare";
 import { Checksum } from "./checksum";
 import { Operations } from "./operations";
@@ -26,16 +26,16 @@ export async function launcher(plugin: Cloudr) {
     plugin.mobile = Platform.isMobileApp;
     plugin.settings.exclusionsOverride = false;
     plugin.setBaseWebdav();
-    plugin.prevPath = `${plugin.app.vault.configDir}/plugins/webdav/prevdata.json`;
+    plugin.prevPath = `${plugin.app.vault.configDir}/plugins/smartSync/prevdata.json`;
     // console.log(plugin.prevPath)
 
     plugin.allFiles = {
         local: {},
-        webdav: {},
+        smartSync: {},
     };
 
     if (plugin.settings.enableRibbons) {
-        plugin.addRibbonIcon("calendar", "Open Daily Note with Webdav", (event: MouseEvent) => {
+        plugin.addRibbonIcon("calendar", "Open Daily Note with SmartSync", (event: MouseEvent) => {
             let middleCick = false;
             if (event.button === 1) {
                 event.preventDefault();
@@ -48,12 +48,12 @@ export async function launcher(plugin: Cloudr) {
             plugin.dailyNote.dailyNote(middleCick);
         });
 
-        plugin.addRibbonIcon("arrow-down-up", "Check and Sync with Webdav", async () => {
+        plugin.addRibbonIcon("arrow-down-up", "Check and Sync with SmartSync", async () => {
             await plugin.operations.check();
             await plugin.operations.fullSync();
         });
 
-        plugin.addRibbonIcon("settings-2", "Open WebDav Control Panel", () => {
+        plugin.addRibbonIcon("settings-2", "Open SmartSync Control Panel", () => {
             plugin.displayModal();
         });
     }
@@ -122,8 +122,8 @@ export async function launcher(plugin: Cloudr) {
     });
 
     plugin.addCommand({
-        id: "display-webdav-modal",
-        name: "Open Webdav Control Panel modal",
+        id: "display-smartSync-modal",
+        name: "Open SmartSync Control Panel modal",
         icon: "settings-2",
         callback: async () => {
             plugin.displayModal();
@@ -131,7 +131,7 @@ export async function launcher(plugin: Cloudr) {
     });
 
     plugin.addCommand({
-        id: "webdav-check",
+        id: "smartSync-check",
         name: "Check for file changes",
         icon: "search",
         callback: async () => {
@@ -141,7 +141,7 @@ export async function launcher(plugin: Cloudr) {
 
     /*
     plugin.addCommand({
-        id: "webdav-push",
+        id: "smartSync-push",
         name: "Force PUSH all File changes",
         callback: async () => {
             plugin.operations.push();
@@ -149,7 +149,7 @@ export async function launcher(plugin: Cloudr) {
     });
 
     plugin.addCommand({
-        id: "webdav-pull",
+        id: "smartSync-pull",
         name: "Force PULL all File changes",
         callback: async () => {
             plugin.operations.pull();
@@ -158,7 +158,7 @@ export async function launcher(plugin: Cloudr) {
     */
 
     plugin.addCommand({
-        id: "webdav-fullsync",
+        id: "smartSync-fullsync",
         name: "Full Sync",
         icon: "arrow-down-up",
         callback: async () => {
@@ -167,7 +167,7 @@ export async function launcher(plugin: Cloudr) {
     });
 
     plugin.addCommand({
-        id: "webdav-check-fullsync",
+        id: "smartSync-check-fullsync",
         name: "Check and Full Sync",
         icon: "arrow-down-up",
         callback: async () => {

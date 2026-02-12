@@ -1,5 +1,5 @@
 import { App, Modal } from "obsidian";
-import Cloudr from "./main";
+import SmartSyncPlugin from "./main";
 import { FileTree, FileTrees, Location, PLUGIN_ID, Status, Type } from "./const";
 
 export class FileTreeModal extends Modal {
@@ -28,7 +28,7 @@ export class FileTreeModal extends Modal {
         this.pathRenderObject = {};
         this.sectionRenderObject = {};
 
-        modalEl.addClass("webdav-modal");
+        modalEl.addClass("smartSync-modal");
         titleEl.setText("WebDAV Control Panel");
 
         const mainDiv = contentEl.createDiv({ cls: "webdav-container" });

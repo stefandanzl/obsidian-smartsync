@@ -1,10 +1,11 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import Cloudr from "./main";
+import SmartSyncPlugin from "./main";
+import { SmartSyncSettingsTab } from "./settings";
 
-export class CloudrSettingsTab extends PluginSettingTab {
-    plugin: Cloudr;
+export class SmartSyncSettingsTab extends PluginSettingTab {
+    plugin: SmartSyncPlugin;
 
-    constructor(app: App, plugin: Cloudr) {
+    constructor(app: App, plugin: SmartSyncPlugin) {
         super(app, plugin);
         this.plugin = plugin;
     }
@@ -14,76 +15,76 @@ export class CloudrSettingsTab extends PluginSettingTab {
         containerEl.empty();
 
         new Setting(containerEl)
-            .setName("Webdav URL")
-            .setDesc("Enter your Server's URL")
+            .setName("SmartSync Server URL")
+            .setDesc("Enter your SmartSync Server's URL (e.g., 127.0.0.1)")
             .addText((text) =>
                 text
-                    .setPlaceholder("https://yourserver.tld/webdav")
+                    .setPlaceholder("127.0.0.1")
                     .setValue(this.plugin.settings.url)
                     .onChange(async (value) => {
                         this.plugin.settings.url = value;
                         this.plugin.setClient();
                         await this.plugin.saveSettings();
-                        // this.plugin.setClient()
                     })
             );
 
         new Setting(containerEl)
-            .setName("Webdav Username")
-            .setDesc("Enter your Server's Username")
+            .setName("SmartSync Server Port")
+            .setDesc("Enter your SmartSync Server's Port (default: 443)")
             .addText((text) =>
                 text
-                    .setPlaceholder("username")
-                    .setValue(this.plugin.settings.username)
+                    .setPlaceholder("443")
+                    .setValue(this.plugin.settings.port.toString())
                     .onChange(async (value) => {
-                        this.plugin.settings.username = value;
-                        this.plugin.setClient();
-                        await this.plugin.saveSettings();
+                        const parseVal = parseInt(value, 10);
+                        if (isNaN(parseVal)) {
+                            console.error("Failed to parse port as a number.");
+                            this.plugin.show("Invalid port number");
+                        } else {
+                            this.plugin.settings.port = parseVal;
+                            this.plugin.setClient();
+                            await this.plugin.saveSettings();
+                        }
                     })
             );
 
         new Setting(containerEl)
-            .setName("Webdav Password")
-            .setDesc("Enter your Server's Password")
+            .setName("Auth Token (Optional)")
+            .setDesc("Enter Bearer token if authentication is enabled on SmartSyncServer")
             .addText((text) =>
                 text
-                    .setPlaceholder("passw0rd")
-                    .setValue(this.plugin.settings.password)
+                    .setPlaceholder("your-secret-token")
+                    .setValue(this.plugin.settings.authToken)
                     .onChange(async (value) => {
-                        this.plugin.settings.password = value;
+                        this.plugin.settings.authToken = value;
                         this.plugin.setClient();
                         await this.plugin.saveSettings();
-                        // this.plugin.setClient()
                     })
             );
 
         new Setting(containerEl)
             .setName("Apply and Test Server Config")
-            .setDesc("Click Button to test Server's connection")
+            .setDesc("Click Button to test Server connection")
             .addButton((button) =>
                 button
                     .onClick(async () => {
-                        this.plugin.setClient().then(async () => {
-                            button.setButtonText((await this.plugin.operations.test(true)) ? "OK" : "FAIL");
-                            // if( this.plugin.message){
-                            //     // nothing yet
-                            // }
-                        });
+                        this.plugin.setClient();
+                        button.setButtonText((await this.plugin.operations.test(true)) ? "OK" : "FAIL");
                     })
                     .setButtonText(this.plugin.prevData.error ? "FAIL" : "OK")
             );
 
         new Setting(containerEl)
-            .setName("Webdav Base Directory")
-            .setDesc("Enter your Server's Base Directory - your Vault will be created inside of it")
+            .setName("Remote Base Directory")
+            .setDesc("Enter your Server's Base Directory - your Vault will be synced inside of it")
             .addText((text) =>
                 text
                     .setPlaceholder("/")
-                    .setValue(this.plugin.settings.webdavPath)
+                    .setValue(this.plugin.settings.remoteBasePath)
                     .onChange(async (value) => {
-                        this.plugin.settings.webdavPath = value.replace(/\\/g, "/");
+                        this.plugin.settings.remoteBasePath = value.replace(/\\/g, "/");
                         await this.plugin.saveSettings();
-                        await this.plugin.setBaseWebdav();
+                        await this.plugin.setBaseRemotePath();
                         this.plugin.operations.test();
                         await this.plugin.saveSettings();
                     })
@@ -91,7 +92,7 @@ export class CloudrSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Override remote Vault Name")
-            .setDesc("Use only if the remote Vault's name differs from this")
+            .setDesc("Use only if remote Vault's name differs from this")
             .addText((text) =>
                 text
                     .setPlaceholder("vaultname")
@@ -99,7 +100,7 @@ export class CloudrSettingsTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.overrideVault = value.replace(/\\/g, "/");
                         await this.plugin.saveSettings();
-                        await this.plugin.setBaseWebdav();
+                        await this.plugin.setBaseRemotePath();
                         // this.plugin.test()
                         await this.plugin.saveSettings();
                     })
@@ -174,7 +175,7 @@ export class CloudrSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Auto Interval Sync periodic interval in seconds")
-            .setDesc("Enter the desired interval in seconds")
+            .setDesc("Enter desired interval in seconds")
             .addText((text) =>
                 text
                     .setPlaceholder("10")
@@ -182,10 +183,9 @@ export class CloudrSettingsTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         const parseVal = parseInt(value, 10);
                         if (isNaN(parseVal)) {
-                            console.error("Failed to parse the string as a number.");
+                            console.error("Failed to parse string as a number.");
                             this.plugin.show("Invalid number entered");
                         } else {
-                            // console.log("Successfully parsed:", parseVal);
                             this.plugin.settings.autoSyncInterval = parseVal;
 
                             this.plugin.setAutoSync();
@@ -222,6 +222,7 @@ export class CloudrSettingsTab extends PluginSettingTab {
             .setDesc("Recommended especially for mobile usage for faster file checking")
             .addToggle((toggle) =>
                 toggle.setValue(this.plugin.settings.skipHiddenMobile).onChange(async (value) => {
+                    this.plugin.settings.skipHiddenMobile = value;
                     this.plugin.settings.skipHiddenDesktop = value;
                     await this.plugin.saveSettings();
                 })
@@ -238,7 +239,7 @@ export class CloudrSettingsTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Webdav Daily Notes Folder")
+            .setName("Remote Daily Notes Folder")
             .setDesc("")
             .addText((text) =>
                 text
@@ -251,7 +252,7 @@ export class CloudrSettingsTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Webdav Daily Notes File Naming Template")
+            .setName("Remote Daily Notes File Naming Template")
             .setDesc("Enter in moment syntax")
             .addText((text) =>
                 text
@@ -264,7 +265,7 @@ export class CloudrSettingsTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Webdav Daily Notes Template File")
+            .setName("Remote Daily Notes Template File")
             .setDesc("Enter path of file you want to be used as template when creating new Daily Note.")
             .addText((text) =>
                 text
@@ -278,7 +279,7 @@ export class CloudrSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Daily Note add Timestamp")
-            .setDesc("Move cursor to the end of Daily Note and insert timestamp in the form of 'HH:MM - '")
+            .setDesc("Move cursor to end of Daily Note and insert timestamp in form of 'HH:MM - '")
             .addToggle((toggle) =>
                 toggle.setValue(this.plugin.settings.dailyNotesTimestamp).onChange(async (value) => {
                     this.plugin.settings.dailyNotesTimestamp = value;

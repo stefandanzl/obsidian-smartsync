@@ -1,5 +1,5 @@
 import { TFile, TAbstractFile, Notice, Plugin, setIcon } from "obsidian";
-import { WebDAVClient } from "./webdav";
+import { SmartSyncClient } from "./smartSync";
 import {} from "./settings";
 import { FileTreeModal } from "./modal";
 import { Checksum } from "./checksum";
@@ -7,13 +7,13 @@ import { Compare } from "./compare";
 import { Operations } from "./operations";
 import { join, sha256 } from "./util";
 import { launcher } from "./setup";
-import { FileList, PreviousObject, Status, CloudrSettings, DEFAULT_SETTINGS, STATUS_ITEMS, FileTrees, Hash, Location, Type } from "./const";
+import { FileList, PreviousObject, Status, SmartSyncSettings, DEFAULT_SETTINGS, STATUS_ITEMS, FileTrees, Hash, Location, Type } from "./const";
 import { DailyNoteManager } from "./dailynote";
 
-export default class Cloudr extends Plugin {
+export default class SmartSync extends Plugin {
     message: string | Array<string[]> | string[] | unknown[];
     doLog: boolean;
-    settings: CloudrSettings;
+    settings: SmartSyncSettings;
     compare: Compare;
     checksum: Checksum;
     operations: Operations;
@@ -27,20 +27,17 @@ export default class Cloudr extends Plugin {
     statusBar2: HTMLElement;
     iconSpan: HTMLSpanElement;
     modal: FileTreeModal;
-
-    webdavPath: string;
+    baseRemotePath: string;
     showModal: boolean;
-    webdavClient: WebDAVClient;
+    smartSyncClient: SmartSyncClient;
     fileTrees: FileTrees;
     fullFileTrees: FileTrees;
     allFiles: {
         local: FileList;
-        webdav: FileList;
+        remote: FileList;
     };
-    baseWebdav: string;
     prevPath: string;
     prevData: PreviousObject;
-
     intervalId: number;
     status: Status;
     lastFileEdited: string;
@@ -52,7 +49,7 @@ export default class Cloudr extends Plugin {
 
     mobile: boolean;
     localFiles: FileList;
-    webdavFiles: FileList;
+    remoteFiles: FileList;
     hashStats: {
         local: {
             totalFiles: number;
@@ -93,21 +90,21 @@ export default class Cloudr extends Plugin {
 
     async setClient() {
         try {
-            this.webdavClient = this.operations.configWebdav(this.settings.url, this.settings.username, this.settings.password);
+            this.smartSyncClient = this.operations.configSmartSync(this.settings.url, this.settings.port, this.settings.authToken);
         } catch (error) {
-            console.error("Webdav Client creation error.", error);
-            this.show("Error creating Webdav Client!");
+            console.error("SmartSync Client creation error.", error);
+            this.show("Error creating SmartSync Client!");
             this.prevData;
         }
     }
 
-    async setBaseWebdav() {
+    async setBaseRemotePath() {
         if (this.settings.overrideVault) {
-            this.baseWebdav = join(this.settings.webdavPath, this.settings.overrideVault).replace(/\\/g, "/");
+            this.baseRemotePath = join(this.settings.remoteBasePath, this.settings.overrideVault).replace(/\\/g, "/");
         } else {
-            this.baseWebdav = join(this.settings.webdavPath, this.app.vault.getName()).replace(/\\/g, "/");
+            this.baseRemotePath = join(this.settings.remoteBasePath, this.app.vault.getName()).replace(/\\/g, "/");
         }
-        this.log("Base webdav: ", this.baseWebdav);
+        this.log("Base remote: ", this.baseRemotePath);
     }
 
     async setAutoSync() {
@@ -117,7 +114,6 @@ export default class Cloudr extends Plugin {
             this.intervalId = window.setInterval(async () => {
                 this.log("AUTOSYNC INTERVAL TRIGGERED");
                 // if (Date.now() - this.checkTime > 30*1000){
-
                 if (this.status === Status.OFFLINE) {
                     const response = await this.operations.test(false);
                     if (!response) {
@@ -143,7 +139,7 @@ export default class Cloudr extends Plugin {
                             deleted: 1,
                             modified: 1,
                         },
-                        webdav: {
+                        remote: {
                             added: 1,
                             deleted: 1,
                             modified: 1,
@@ -155,6 +151,7 @@ export default class Cloudr extends Plugin {
             }, this.settings.autoSyncInterval * 1000);
         }
     }
+
     async renewLiveSyncTimeout(abstractFile: TFile, attempt = 0) {
         const filePath: string = abstractFile.path;
         const timeoutId = this.liveSyncTimeouts[filePath];
@@ -178,7 +175,6 @@ export default class Cloudr extends Plugin {
             // const minInterval = this.connectionError ? 20000 : 5000;
 
             // if (now - this.lastLiveSync < minInterval) {
-            //     this.renewLiveSyncTimeout(abstractFile);
             //     return;
             // }
 
@@ -186,6 +182,7 @@ export default class Cloudr extends Plugin {
                 this.lastLiveSync = Date.now();
 
                 this.setStatus(Status.AUTO);
+
                 try {
                     const file: TFile = abstractFile;
                     const filePath: string = file.path;
@@ -200,8 +197,8 @@ export default class Cloudr extends Plugin {
                     const data = await this.app.vault.readBinary(file);
                     const hash = await sha256(data);
 
-                    const remoteFilePath = join(this.baseWebdav, filePath);
-                    const response = await this.webdavClient.put(remoteFilePath, data);
+                    const remoteFilePath = join(this.baseRemotePath, filePath);
+                    const response = await this.smartSyncClient.uploadFile(remoteFilePath, data);
                     if (!response) {
                         this.setStatus(Status.OFFLINE);
                         this.renewLiveSyncTimeout(abstractFile);
@@ -238,6 +235,7 @@ export default class Cloudr extends Plugin {
             this.app.vault.off("modify", modifyHandler);
         }
     }
+
     async errorWrite() {
         // this.prevData.error = true;
         this.setError(true);
@@ -262,18 +260,16 @@ export default class Cloudr extends Plugin {
         if (this.prevData.error) {
             this.show("Error detected - please clear in control panel or force action by retriggering " + action);
             console.log("SAVE ERROR OCCURREDDD");
-            console.error("SAVESPACE COMPROMISED, PANIC!");
             return;
         }
         if (this.status === Status.NONE && !this.prevData.error) {
             this.setStatus(Status.SAVE);
+
             try {
                 // if (checkLocal || emptyObj(this.allFiles.local)) {
                 // const oldPrevData = this.prevData.files;
-                /**
-                 * IMPORTANT! generateLocalHashTree must be given false in order for ALL files to be properly added to your previous files.
-                 * Otherwise they may be seen as "added" or "deleted"
-                 */
+                // }
+
                 const files = await this.checksum.generateLocalHashTree(false);
 
                 Object.keys(this.tempExcludedFiles).forEach((path) => {
@@ -290,12 +286,12 @@ export default class Cloudr extends Plugin {
                                 break;
                             case "modified":
                                 // Write old hash again to prevData
-                                files[path] = this.prevData.files[path];
+                                files[path] = this.prevData.files[path as keyof PreviousObject];
                                 break;
                             default:
                                 break;
                         }
-                    } else if (this.tempExcludedFiles[path].location === "webdavFiles") {
+                    } else if (this.tempExcludedFiles[path].location === "remoteFiles") {
                         switch (this.tempExcludedFiles[path].type) {
                             case "added":
                                 // Do not write to prevData
@@ -303,11 +299,11 @@ export default class Cloudr extends Plugin {
                                 break;
                             case "deleted":
                                 // Write to prevData
-                                // files[path] = this.tempExcludedFiles[path].hash;
+                                files[path] = this.tempExcludedFiles[path].hash;
                                 break;
                             case "modified":
                                 // Write old hash again to prevData
-                                // files[path] = this.prevData.files[path];
+                                files[path] = this.prevData.files[path as keyof PreviousObject];
                                 break;
                             default:
                                 break;
@@ -317,8 +313,6 @@ export default class Cloudr extends Plugin {
                         // will already not be treated by sync
                         // TODO: add additional click handler for except area
                     }
-
-                    files[path as keyof FileList] = this.prevData.files[path as keyof PreviousObject];
                 });
 
                 const newExcept = this.compare.checkExistKey(this.fileTrees.localFiles.except, files);
@@ -335,7 +329,6 @@ export default class Cloudr extends Plugin {
                 this.show("Saved current vault state!");
             } catch (error) {
                 console.log("Error occurred while saving State. ", error);
-                console.error("SAVESTATE", error);
                 this.setError(true);
                 return error;
             } finally {
@@ -359,7 +352,7 @@ export default class Cloudr extends Plugin {
 
     async initRemote() {
         //
-        await this.operations.deleteFilesWebdav(this.webdavFiles);
+        await this.operations.deleteFilesRemote(this.remoteFiles);
         await this.operations.uploadFiles(this.localFiles);
     }
 
@@ -427,7 +420,6 @@ export default class Cloudr extends Plugin {
         this.status = status;
 
         // this.app.vault.fileMap
-
         if (text) {
             this.statusBar.setText(text);
             return;
@@ -436,7 +428,7 @@ export default class Cloudr extends Plugin {
         // show && this.statusBar.setText(status);
         if (show) {
             // Update status method
-            //  updateSyncStatus(status: 'error' | 'syncing' | 'success') {
+            // updateSyncStatus(status: 'error' | 'syncing' | 'success')
             // this.iconSpan.removeClass("mod-error", "mod-syncing", "mod-success", );
             // this.iconSpan.addClass(`mod-${STATUS_ITEMS[status].class}`);
             this.iconSpan.setCssProps({ color: STATUS_ITEMS[status].color });
