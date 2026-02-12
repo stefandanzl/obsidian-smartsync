@@ -1,8 +1,10 @@
 /* Modal and main layout */
-.webdav-modal {
-    overflow-y: hidden;
-    width: 100%;
-    height: 100%;
+.smart-sync-modal {
+    overflow: hidden;
+    width: 80vw;
+    max-width: 1200px;
+    min-width: 600px;
+    height: 80vh;
     background: var(--background-primary);
 }
 
@@ -10,18 +12,19 @@
 overflow-y: auto;
 }
 
-.webdav-container {
+.smart-sync-container {
     position: relative;
     display: flex;
     flex-direction: row-reverse;
     gap: 12px;
     margin: 0;
     padding: 20px;
-    min-height: 400px;
-    max-height: 80vh;
+    height: 100%;
+    max-height: calc(80vh - 40px);
+    overflow: hidden;
 }
 
-.webdav-button-container {
+.smart-sync-button-container {
     position: absolute;
     right: 20px;
     top: 20px;
@@ -38,17 +41,19 @@ overflow-y: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.webdav-content {
+.smart-sync-content {
     flex: 1;
-    margin-right: 200px;
+    margin-right: 220px;
     overflow: hidden;
     height: 100%;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
+    max-height: 100%;
 }
  
- .webdav-file-tree {
+ .smart-sync-file-tree {
     flex: 1;
     overflow-y: auto;
     user-select: text;
@@ -57,8 +62,8 @@ overflow-y: auto;
     border-radius: 12px;
     border: 1px solid var(--background-modifier-border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    /*margin-top: 10px;*/
     min-height: 0;
+    max-height: 100%;
 }
  
  /* Sync status styling */
@@ -131,9 +136,10 @@ overflow-y: auto;
     border-radius: 4px;
     transition: all 0.2s ease;
     line-height: 1.4;
-    word-break: break-all;
+    white-space: nowrap;
     display: flex;
     align-items: center;
+    min-width: 0;
 }
 
 .sync-file-entry:hover {
@@ -146,16 +152,21 @@ overflow-y: auto;
     font-size: var(--font-ui-small);
     display: inline-block;
     width: 20px;
+    min-width: 20px;
     text-align: center;
+    flex-shrink: 0;
 }
 
 .file-path {
     font-family: var(--font-monospace);
     flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
  
  /* Button styling */
-.webdav-button {
+.smart-sync-button {
     padding: 12px 16px;
     margin: 0;
     width: 100%;
@@ -172,23 +183,23 @@ overflow-y: auto;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.webdav-button:hover {
+.smart-sync-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
     border-color: var(--interactive-hover);
 }
 
-.webdav-button:active {
+.smart-sync-button:active {
     transform: translateY(0);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Button section styling */
-.webdav-button-section {
+.smart-sync-button-section {
     margin-bottom: 24px;
 }
 
-.webdav-section-title {
+.smart-sync-section-title {
     font-size: var(--font-ui-small);
     font-weight: var(--font-semibold);
     color: var(--text-muted);
@@ -285,22 +296,24 @@ overflow-y: auto;
 
 /* Responsive design improvements */
 @media (max-width: 768px) {
-    .webdav-container {
-        flex-direction: column;
-        gap: 20px;
+    .smart-sync-modal {
+        width: 95vw;
+        min-width: unset;
+    }
+
+    .smart-sync-container {
         padding: 15px;
     }
 
-    .webdav-button-container {
-        width: 100%;
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 10px;
+    .smart-sync-button-container {
+        width: 200px;
+        padding: 8px;
+        gap: 8px;
     }
 
-    .webdav-button {
-        flex: 1;
-        min-width: 120px;
+    .smart-sync-button {
+        font-size: var(--font-ui-smaller);
+        padding: 10px 12px;
     }
 
     .sync-location-title {
@@ -312,52 +325,45 @@ overflow-y: auto;
     }
 }
 
-/* Narrow aspect ratio improvements for basic operations */
-@media (max-width: 600px), (max-aspect-ratio: 3/4) {
-    .webdav-button-section:first-child {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
+/* Narrow aspect ratio improvements */
+@media (max-width: 600px) {
+    .smart-sync-modal {
+        width: 98vw;
+        min-width: unset;
     }
 
-    .webdav-button-section:first-child .webdav-section-title {
-        grid-column: 1 / -1;
-        margin-bottom: 8px;
+    .smart-sync-button-container {
+        width: 220px;
     }
 
-    .webdav-button-section:first-child .webdav-button {
+    .smart-sync-button {
         min-width: unset;
         padding: 10px 12px;
         font-size: var(--font-ui-smaller);
     }
 
-    .webdav-button-container {
-        gap: 8px;
-        padding: 15px;
-    }
-
-    .webdav-section-title {
+    .smart-sync-section-title {
         font-size: var(--font-ui-smaller);
         margin-bottom: 8px;
     }
 }
 
 /* Dark mode improvements */
-.theme-dark .webdav-button-container {
+.theme-dark .smart-sync-button-container {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.theme-dark .webdav-file-tree {
+.theme-dark .smart-sync-file-tree {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* Loading and animation states */
-.webdav-button.loading {
+.smart-sync-button.loading {
     position: relative;
     color: transparent !important;
 }
 
-.webdav-button.loading::after {
+.smart-sync-button.loading::after {
     content: "";
     position: absolute;
     width: 16px;
@@ -378,26 +384,26 @@ overflow-y: auto;
 }
 
 /* Improved scrollbars */
-.webdav-file-tree::-webkit-scrollbar {
+.smart-sync-file-tree::-webkit-scrollbar {
     width: 8px;
 }
 
-.webdav-file-tree::-webkit-scrollbar-track {
+.smart-sync-file-tree::-webkit-scrollbar-track {
     background: var(--background-secondary);
     border-radius: 4px;
 }
 
-.webdav-file-tree::-webkit-scrollbar-thumb {
+.smart-sync-file-tree::-webkit-scrollbar-thumb {
     background: var(--background-modifier-border-hover);
     border-radius: 4px;
 }
 
-.webdav-file-tree::-webkit-scrollbar-thumb:hover {
+.smart-sync-file-tree::-webkit-scrollbar-thumb:hover {
     background: var(--interactive-normal);
 }
 
 /* Status bar styling */
-.webdav-status-bar {
+.smart-sync-status-bar {
     padding: 12px 16px;
     background: var(--background-secondary);
     border-radius: 8px;
@@ -412,24 +418,24 @@ overflow-y: auto;
     cursor: default;
 }
 
-.webdav-status-bar.clickable {
+.smart-sync-status-bar.clickable {
     cursor: pointer;
 }
 
-.webdav-status-bar.clickable:hover {
+.smart-sync-status-bar.clickable:hover {
     background: var(--background-modifier-hover);
     transform: translateY(-1px);
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
     border-color: var(--interactive-hover);
 }
 
-.webdav-status-bar.clickable:active {
+.smart-sync-status-bar.clickable:active {
     transform: translateY(0);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 
-.webdav-status-text {
+.smart-sync-status-text {
     flex: 1;
 }
 

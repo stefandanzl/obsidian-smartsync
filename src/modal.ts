@@ -28,24 +28,24 @@ export class FileTreeModal extends Modal {
         this.pathRenderObject = {};
         this.sectionRenderObject = {};
 
-        modalEl.addClass("smartSync-modal");
+        modalEl.addClass("smart-sync-modal");
         titleEl.setText("SmartSync Control Panel");
 
-        const mainDiv = contentEl.createDiv({ cls: "webdav-container" });
+        const mainDiv = contentEl.createDiv({ cls: "smart-sync-container" });
 
-        const buttonDiv = mainDiv.createDiv({ cls: "webdav-button-container" });
+        const buttonDiv = mainDiv.createDiv({ cls: "smart-sync-button-container" });
 
         // Add button sections
-        const basicSection = buttonDiv.createDiv({ cls: "webdav-button-section" });
+        const basicSection = buttonDiv.createDiv({ cls: "smart-sync-button-section" });
 
-        const advancedSection = buttonDiv.createDiv({ cls: "webdav-button-section advanced-section" });
-        advancedSection.createEl("h3", { text: "Advanced", cls: "webdav-section-title" });
+        const advancedSection = buttonDiv.createDiv({ cls: "smart-sync-button-section advanced-section" });
+        advancedSection.createEl("h3", { text: "Advanced", cls: "smart-sync-section-title" });
 
         let advancedEnabled = false;
 
         // Add clickable status bar as test button
-        const statusBar = basicSection.createDiv({ cls: "webdav-status-bar clickable" });
-        const statusText = statusBar.createSpan({ cls: "webdav-status-text" });
+        const statusBar = basicSection.createDiv({ cls: "smart-sync-status-bar clickable" });
+        const statusText = statusBar.createSpan({ cls: "smart-sync-status-text" });
         statusText.setText("Ready");
         statusText.setCssStyles({
             whiteSpace: "nowrap",
@@ -65,7 +65,7 @@ export class FileTreeModal extends Modal {
          */
         const checkButton = basicSection.createEl("button", {
             text: `🔍 CHECK ${Status.CHECK}`,
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
         });
         checkButton.addEventListener("click", () => {
             this.plugin.operations.check();
@@ -76,7 +76,7 @@ export class FileTreeModal extends Modal {
          */
         const syncButton = basicSection.createEl("button", {
             text: `🔄 SYNC ${Status.SYNC}`,
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
         });
         syncButton.addEventListener("click", async () => {
             // this.plugin.show("Synchronizing files with server ...")
@@ -88,7 +88,7 @@ export class FileTreeModal extends Modal {
          */
         const advancedButton = basicSection.createEl("button", {
             text: "⚡ ADVANCED",
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
         });
         advancedButton.addEventListener("click", async () => {
             if (advancedEnabled) {
@@ -109,7 +109,7 @@ export class FileTreeModal extends Modal {
          */
         const openSettingsButton = advancedSection.createEl("button", {
             text: "⚙️ SETTINGS",
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
         });
         openSettingsButton.addEventListener("click", () => {
             this.plugin.settingPrivate.openTabById(PLUGIN_ID);
@@ -121,7 +121,7 @@ export class FileTreeModal extends Modal {
          */
         const pauseButton = advancedSection.createEl("button", {
             text: `⏸️ PAUSE ${Status.PAUSE}`,
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
         });
         pauseButton.addEventListener("click", () => {
             this.plugin.show("Toggling Pause");
@@ -133,7 +133,7 @@ export class FileTreeModal extends Modal {
          */
         const errorButton = advancedSection.createEl("button", {
             text: `🚨 ERROR ${Status.ERROR}`,
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
             title: "Clear the error status in your previous data storage",
         });
         errorButton.addEventListener("click", () => {
@@ -147,7 +147,7 @@ export class FileTreeModal extends Modal {
          */
         const saveButton = advancedSection.createEl("button", {
             text: `💾 SAVE ${Status.SAVE}`,
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
         });
         saveButton.addEventListener("click", () => {
             this.plugin.show("Saving current vault file state for future synchronisation actions");
@@ -159,7 +159,7 @@ export class FileTreeModal extends Modal {
          */
         const pullButton = advancedSection.createEl("button", {
             text: `⬇️ PULL ${Status.PULL}`,
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
         });
         pullButton.addEventListener("click", async () => {
             this.plugin.operations.pull();
@@ -170,7 +170,7 @@ export class FileTreeModal extends Modal {
          */
         const pushButton = advancedSection.createEl("button", {
             text: `⬆️ PUSH ${Status.PUSH}`,
-            cls: ["mod-cta", "webdav-button"],
+            cls: ["mod-cta", "smart-sync-button"],
         });
         pushButton.addEventListener("click", async () => {
             // this.plugin.show("Pushing files to server ...")
@@ -179,7 +179,7 @@ export class FileTreeModal extends Modal {
 
         const dupLocalBtn = advancedSection.createEl("button", {
             text: `📋 DUPLICATE LOCAL`,
-            cls: ["mod-cta", "webdav-button", "button-danger"],
+            cls: ["mod-cta", "smart-sync-button", "button-danger"],
         });
         dupLocalBtn.addEventListener("click", async () => {
             await this.plugin.operations.duplicateLocal();
@@ -187,13 +187,13 @@ export class FileTreeModal extends Modal {
 
         const dupWebBtn = advancedSection.createEl("button", {
             text: `🌐 DUPLICATE REMOTE`,
-            cls: ["mod-cta", "webdav-button", "button-danger"],
+            cls: ["mod-cta", "smart-sync-button", "button-danger"],
         });
         dupWebBtn.addEventListener("click", async () => {
             await this.plugin.operations.duplicateRemote();
         });
 
-        const containDiv = mainDiv.createDiv({ cls: "webdav-content" });
+        const containDiv = mainDiv.createDiv({ cls: "smart-sync-content" });
 
         // Update status based on plugin state
         const updateStatus = () => {
@@ -213,7 +213,7 @@ export class FileTreeModal extends Modal {
             };
 
             statusText.setText(`${status} ${statusMessages[status] || "Unknown status"}`);
-            statusBar.className = `webdav-status-bar status-${status.toLowerCase()}`;
+            statusBar.className = `smart-sync-status-bar status-${status.toLowerCase()}`;
         };
 
         // Set initial status and create status updater
@@ -227,7 +227,7 @@ export class FileTreeModal extends Modal {
             updateStatus();
         };
 
-        this.fileTreeDiv = containDiv.createDiv({ cls: "webdav-file-tree" });
+        this.fileTreeDiv = containDiv.createDiv({ cls: "smart-sync-file-tree" });
         // Save position
         this.fileTreeDiv.addEventListener("scroll", (e) => {
             this.plugin.lastScrollPosition = (e.target as HTMLElement).scrollTop;
