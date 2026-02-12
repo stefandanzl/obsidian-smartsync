@@ -16,7 +16,7 @@ export class FileTreeModal extends Modal {
     >;
     constructor(
         app: App,
-        public plugin: Cloudr
+        public plugin: SmartSyncPlugin
     ) {
         super(app);
     }
@@ -29,7 +29,7 @@ export class FileTreeModal extends Modal {
         this.sectionRenderObject = {};
 
         modalEl.addClass("smartSync-modal");
-        titleEl.setText("WebDAV Control Panel");
+        titleEl.setText("SmartSync Control Panel");
 
         const mainDiv = contentEl.createDiv({ cls: "webdav-container" });
 
@@ -186,11 +186,11 @@ export class FileTreeModal extends Modal {
         });
 
         const dupWebBtn = advancedSection.createEl("button", {
-            text: `🌐 DUPLICATE WEBDAV`,
+            text: `🌐 DUPLICATE REMOTE`,
             cls: ["mod-cta", "webdav-button", "button-danger"],
         });
         dupWebBtn.addEventListener("click", async () => {
-            await this.plugin.operations.duplicateWebdav();
+            await this.plugin.operations.duplicateRemote();
         });
 
         const containDiv = mainDiv.createDiv({ cls: "webdav-content" });
@@ -256,7 +256,7 @@ export class FileTreeModal extends Modal {
         const mainContainer = this.fileTreeDiv.createDiv({ cls: "sync-status" });
 
         // Check if there's anything to sync
-        const hasAnyChanges = ["webdavFiles", "localFiles"].some((location) => {
+        const hasAnyChanges = ["remoteFiles", "localFiles"].some((location) => {
             // IMPORTANT! NOT USING fileTrees here because it will be modified! For rendering using an original twin
             const locationData = this.plugin.fullFileTrees[location as keyof FileTrees];
             return Object.values(locationData).some((section) => Object.keys(section).length > 0);
@@ -337,7 +337,7 @@ export class FileTreeModal extends Modal {
 
         // Helper function to render a section if it has entries
         function renderSection(
-            plugin: Cloudr,
+            plugin: SmartSyncPlugin,
             parent: HTMLElement,
             title: string,
             data: Record<string, string>,
@@ -523,13 +523,13 @@ export class FileTreeModal extends Modal {
                                         hash,
                                     };
                                     plugin.fileTrees[location].modified[path] = hash;
-                                    delete plugin.fileTrees.webdavFiles.except[path];
+                                    delete plugin.fileTrees.remoteFiles.except[path];
                                     delete plugin.fileTrees.localFiles.except[path];
 
                                     pathDiv.addClass("file-user-upload");
                                 } else if (plugin.tempExcludedFiles[path].location === "localFiles") {
                                     // DOWNLOAD
-                                    const location: Location = "webdavFiles";
+                                    const location: Location = "remoteFiles";
                                     const hash = plugin.fileTrees[location][parents.type][path];
                                     plugin.tempExcludedFiles[path] = {
                                         location,
@@ -540,15 +540,15 @@ export class FileTreeModal extends Modal {
                                     delete plugin.fileTrees["localFiles"].modified[path];
                                     pathDiv.removeClass("file-user-upload");
                                     pathDiv.addClass("file-user-download");
-                                } else if (plugin.tempExcludedFiles[path].location === "webdavFiles") {
+                                } else if (plugin.tempExcludedFiles[path].location === "remoteFiles") {
                                     // RESET TO EXCEPT
-                                    const hash = plugin.fileTrees.webdavFiles[parents.type][path];
+                                    const hash = plugin.fileTrees.remoteFiles[parents.type][path];
                                     delete plugin.tempExcludedFiles[path];
 
-                                    delete plugin.fileTrees["webdavFiles"].modified[path];
+                                    delete plugin.fileTrees["remoteFiles"].modified[path];
                                     pathDiv.removeClass("file-user-download");
 
-                                    plugin.fileTrees.webdavFiles.except[path] = hash;
+                                    plugin.fileTrees.remoteFiles.except[path] = hash;
                                     plugin.fileTrees.localFiles.except[path] = hash;
                                 }
                                 return;
@@ -566,7 +566,7 @@ export class FileTreeModal extends Modal {
         }
 
         // Render each location if it has any changes
-        ["webdavFiles", "localFiles"].forEach((location) => {
+        ["remoteFiles", "localFiles"].forEach((location) => {
             // IMPORTANT: using copy of fileTrees for rendering it in entirety and then adding formatting
             const locationData = this.plugin.fullFileTrees[location as keyof FileTrees];
             const hasChanges = Object.values(locationData).some((section) => Object.keys(section).length > 0);
@@ -575,7 +575,7 @@ export class FileTreeModal extends Modal {
                 const locationDiv = mainContainer.createDiv({ cls: "sync-location" });
                 locationDiv.createDiv({
                     cls: "sync-location-title",
-                    text: location === "webdavFiles" ? "☁️ Remote" : "💻 Local",
+                    text: location === "remoteFiles" ? "☁️ Remote" : "💻 Local",
                 });
 
                 ["added", "deleted", "modified"].forEach((type) => {

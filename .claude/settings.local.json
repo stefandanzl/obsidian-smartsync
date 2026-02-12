@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(task:*)"
+      "Bash(task:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

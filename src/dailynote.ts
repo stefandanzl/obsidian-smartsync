@@ -1,12 +1,12 @@
 import { TFile, moment, normalizePath } from "obsidian";
-import Cloudr from "./main";
+import SmartSyncPlugin from "./main";
 import { createFolderIfNotExists, logNotice } from "./util";
 import { Status, STATUS_ITEMS } from "./const";
 
 export class DailyNoteManager {
     private ignoreConnection: boolean; //currently unused
 
-    constructor(private plugin: Cloudr) {
+    constructor(private plugin: SmartSyncPlugin) {
         this.plugin = plugin;
         this.ignoreConnection = false; //set statically
     }
@@ -29,7 +29,7 @@ export class DailyNoteManager {
                 return [existingFile];
             }
             if (remoteContent !== undefined) {
-                this.plugin.show("Modified Daily Note from the one on Webdav");
+                this.plugin.show("Modified Daily Note from the one on SmartSync");
                 finalContent = remoteContent;
                 // Update existing file instead of creating new one
                 await this.plugin.app.vault.modify(existingFile, finalContent);
@@ -104,19 +104,16 @@ export class DailyNoteManager {
     }
 
     /**
-     * Fetches daily note content from WebDAV server
+     * Fetches daily note content from SmartSyncServer
      */
     async getDailyNoteRemotely(dailyNotePath: string): Promise<string | undefined> {
         try {
-            if (await this.plugin.webdavClient.exists(normalizePath(this.plugin.baseWebdav + "/" + dailyNotePath))) {
-                const response = await this.plugin.webdavClient.get(normalizePath(this.plugin.baseWebdav + "/" + dailyNotePath));
-                if (response.status === 200 && response.data) {
-                    return new TextDecoder().decode(response.data);
-                } else {
-                    console.error("Daily Note: no connection possible");
-                }
+            const remotePath = normalizePath(dailyNotePath);
+            const response = await this.plugin.smartSyncClient.getFile(remotePath);
+            if (response.status === 200 && response.data) {
+                return new TextDecoder().decode(response.data);
             } else {
-                console.log("Daily Note: File doesnt exist remotely!");
+                console.error("Daily Note: no connection possible");
             }
         } catch (error) {
             console.log("Daily Note: Failed to fetch remote content due to connection error:", error);
@@ -135,13 +132,15 @@ export class DailyNoteManager {
         const maxRetries = 5;
         const timeout = 2000; // 500ms timeout
         let retryCount = 0;
-        let connected: boolean | unknown = false;
+        let connected = false;
 
         while (retryCount < maxRetries && !connected) {
             try {
                 connected = await Promise.race([
-                    this.plugin.webdavClient.exists(this.plugin.settings.webdavPath),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Connection timeout")), timeout)),
+                    this.plugin.smartSyncClient.getStatus().then((status) => status.online),
+                    new Promise<never>((_resolve, reject) => {
+                        setTimeout(() => reject(new Error("Connection timeout")), timeout);
+                    }),
                 ]);
 
                 if (connected) break;
@@ -243,14 +242,14 @@ export class DailyNoteManager {
                 if (this.plugin.status !== Status.NONE && this.plugin.status !== Status.OFFLINE) {
                     const waitTime = 3;
                     logNotice(
-                        `Webdav plugin currently busy with ${STATUS_ITEMS[this.plugin.status].label} ${this.plugin.status}!\nTrying automatically again in ${waitTime} seconds ...`,
+                        `SmartSync plugin currently busy with ${STATUS_ITEMS[this.plugin.status].label} ${this.plugin.status}!\nTrying automatically again in ${waitTime} seconds ...`,
                         1000 * waitTime
                     );
                     await sleep(1000 * waitTime);
                     //@ts-ignore
                     if (this.plugin.status !== Status.NONE) {
                         this.plugin.show(
-                            `Webdav plugin currently busy with ${STATUS_ITEMS[this.plugin.status].label} ${this.plugin.status}!\nTry again later - check statusbar icon for info!`
+                            `SmartSync plugin currently busy with ${STATUS_ITEMS[this.plugin.status].label} ${this.plugin.status}!\nTry again later - check statusbar icon for info!`
                         );
                         return;
                     }

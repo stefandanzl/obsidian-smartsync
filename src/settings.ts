@@ -1,6 +1,5 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import SmartSyncPlugin from "./main";
-import { SmartSyncSettingsTab } from "./settings";
 
 export class SmartSyncSettingsTab extends PluginSettingTab {
     plugin: SmartSyncPlugin;

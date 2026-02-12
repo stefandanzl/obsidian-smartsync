@@ -1,5 +1,8 @@
 import SmartSyncPlugin from "./main";
 import { SmartSyncSettingsTab } from "./settings";
+
+// Type alias for the default export
+type SmartSync = SmartSyncPlugin;
 import { Compare } from "./compare";
 import { Checksum } from "./checksum";
 import { Operations } from "./operations";
@@ -7,12 +10,12 @@ import { Platform, setIcon } from "obsidian";
 import { Status } from "./const";
 import { DailyNoteManager } from "./dailynote";
 
-export async function launcher(plugin: Cloudr) {
+export async function launcher(plugin: SmartSync) {
     await plugin.loadSettings();
     plugin.doLog = false;
 
     // plugin adds a settings tab so the user can configure various aspects of the plugin
-    plugin.addSettingTab(new CloudrSettingsTab(plugin.app, plugin));
+    plugin.addSettingTab(new SmartSyncSettingsTab(plugin.app, plugin));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     plugin.settingPrivate = (this.app as any).setting;
@@ -25,13 +28,13 @@ export async function launcher(plugin: Cloudr) {
 
     plugin.mobile = Platform.isMobileApp;
     plugin.settings.exclusionsOverride = false;
-    plugin.setBaseWebdav();
+    plugin.setBaseRemotePath();
     plugin.prevPath = `${plugin.app.vault.configDir}/plugins/smartSync/prevdata.json`;
     // console.log(plugin.prevPath)
 
     plugin.allFiles = {
         local: {},
-        smartSync: {},
+        remote: {},
     };
 
     if (plugin.settings.enableRibbons) {
@@ -114,7 +117,7 @@ export async function launcher(plugin: Cloudr) {
 
     plugin.addCommand({
         id: "daily-note",
-        name: "Create Daily Note with Webdav",
+        name: "Create Daily Note with SmartSync",
         icon: "calendar",
         callback: async () => {
             plugin.dailyNote.dailyNote();
