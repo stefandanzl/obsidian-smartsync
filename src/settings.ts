@@ -15,10 +15,10 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("SmartSync Server URL")
-            .setDesc("Enter your SmartSync Server's URL (e.g., 127.0.0.1)")
+            .setDesc("Enter your SmartSync Server's URL (e.g., http://127.0.0.1)")
             .addText((text) =>
                 text
-                    .setPlaceholder("127.0.0.1")
+                    .setPlaceholder("http://127.0.0.1")
                     .setValue(this.plugin.settings.url)
                     .onChange(async (value) => {
                         this.plugin.settings.url = value;
@@ -29,7 +29,7 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("SmartSync Server Port")
-            .setDesc("Enter your SmartSync Server's Port (default: 443)")
+            .setDesc("Optional: Enter your SmartSync Server's Port (default: 443)")
             .addText((text) =>
                 text
                     .setPlaceholder("443")
@@ -72,8 +72,6 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                     })
                     .setButtonText(this.plugin.prevData.error ? "FAIL" : "OK")
             );
-
-
 
         new Setting(containerEl)
             .setName("Excluded Directories")

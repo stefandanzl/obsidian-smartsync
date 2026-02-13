@@ -95,8 +95,8 @@ export default class SmartSync extends Plugin {
          */
         // const doLog = true;
         this.message = text;
-        // if (this.doLog) {
-        if (true) {
+        if (this.doLog) {
+            // if (true) {
             console.log(...text);
         }
     }

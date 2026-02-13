@@ -52,7 +52,11 @@ export class SmartSyncClient {
 
     private createFullUrl(path: string): string {
         const cleanPath = path.startsWith("/") ? path : `/${path}`;
-        return `http://${this.serverUrl}:${this.port}${cleanPath}`;
+        var port = "";
+        if (this.port != 0) {
+            port = ":" + this.port;
+        }
+        return `${this.serverUrl}${port}${cleanPath}`;
     }
 
     /**
@@ -69,7 +73,7 @@ export class SmartSyncClient {
             });
             console.log("SmartSync getStatus response:", response.status, response.json);
             // Validate response structure
-            if (!response.json || typeof response.json.online !== 'boolean') {
+            if (!response.json || typeof response.json.online !== "boolean") {
                 console.error("Invalid status response structure:", response.json);
                 return { online: false, file_count: 0 };
             }

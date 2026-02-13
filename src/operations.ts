@@ -247,18 +247,15 @@ export class Operations {
     }
 
     async test(show = true) {
-        console.log("[TEST] Starting connection test, show:", show);
         try {
             this.plugin.setStatus(Status.TEST);
             show && this.plugin.show(`${Status.TEST} Testing ...`);
 
-            console.log("[TEST] Getting server status...");
             const status = await this.plugin.smartSyncClient.getStatus();
             console.log("[TEST] Server status response:", status);
 
             // Check if online field exists and is true
             if (status && status.online === true) {
-                console.log("[TEST] Connection successful!");
                 show && this.plugin.show("Connection successful");
                 // ALWAYS set status to NONE after successful test, regardless of show parameter
                 this.plugin.setStatus(Status.NONE);
@@ -368,26 +365,26 @@ export class Operations {
             stats.totalTime = Date.now() - stats.startTime;
 
             // Log performance statistics
-            console.log(`=== CHECK PERFORMANCE STATISTICS ===`);
-            console.log(`Total time: ${stats.totalTime}ms`);
-            console.log(`Connection test: ${stats.testTime}ms`);
-            console.log(`Remote scan: ${stats.remoteScanTime}ms (${stats.fileCounts.remote} files)`);
-            console.log(`Local scan: ${stats.localScanTime}ms (${stats.fileCounts.local} files)`);
-            console.log(`Comparison: ${stats.compareTime}ms`);
-            console.log(`Files per second (Remote): ${Math.round((stats.fileCounts.remote / stats.remoteScanTime) * 1000)}`);
-            console.log(`Files per second (Local): ${Math.round((stats.fileCounts.local / stats.localScanTime) * 1000)}`);
+            this.plugin.log(`=== CHECK PERFORMANCE STATISTICS ===`);
+            this.plugin.log(`Total time: ${stats.totalTime}ms`);
+            this.plugin.log(`Connection test: ${stats.testTime}ms`);
+            this.plugin.log(`Remote scan: ${stats.remoteScanTime}ms (${stats.fileCounts.remote} files)`);
+            this.plugin.log(`Local scan: ${stats.localScanTime}ms (${stats.fileCounts.local} files)`);
+            this.plugin.log(`Comparison: ${stats.compareTime}ms`);
+            this.plugin.log(`Files per second (Remote): ${Math.round((stats.fileCounts.remote / stats.remoteScanTime) * 1000)}`);
+            this.plugin.log(`Files per second (Local): ${Math.round((stats.fileCounts.local / stats.localScanTime) * 1000)}`);
 
             // Log hash statistics
             if (stats.hashStats) {
                 const hashPercentage =
                     stats.hashStats.totalFiles > 0 ? Math.round((stats.hashStats.cachedHashes / stats.hashStats.totalFiles) * 100) : 0;
-                console.log(`\n=== HASH OPTIMIZATION STATISTICS ===`);
-                console.log(`Total files processed: ${stats.hashStats.totalFiles}`);
-                console.log(`Hashes from cache: ${stats.hashStats.cachedHashes} (${hashPercentage}%)`);
-                console.log(`Hashes calculated: ${stats.hashStats.calculatedHashes}`);
-                console.log(`Files skipped (excluded): ${stats.hashStats.skippedFiles}`);
-                console.log(`Cache efficiency: ${hashPercentage}% - Higher is better!`);
-                console.log(`===============================`);
+                this.plugin.log(`\n=== HASH OPTIMIZATION STATISTICS ===`);
+                this.plugin.log(`Total files processed: ${stats.hashStats.totalFiles}`);
+                this.plugin.log(`Hashes from cache: ${stats.hashStats.cachedHashes} (${hashPercentage}%)`);
+                this.plugin.log(`Hashes calculated: ${stats.hashStats.calculatedHashes}`);
+                this.plugin.log(`Files skipped (excluded): ${stats.hashStats.skippedFiles}`);
+                this.plugin.log(`Cache efficiency: ${hashPercentage}% - Higher is better!`);
+                this.plugin.log(`===============================`);
             }
 
             show && ok && this.plugin.show(`Finished checking files after ${calcDuration(this.plugin.checkTime)} s`);
