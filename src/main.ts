@@ -20,6 +20,7 @@ import {
     Type,
 } from "./const";
 import { DailyNoteManager } from "./dailynote";
+import * as path from "path";
 
 export default class SmartSync extends Plugin {
     message: string | Array<string[]> | string[] | unknown[];
@@ -275,46 +276,13 @@ export default class SmartSync extends Plugin {
 
                 const files = await this.checksum.generateLocalHashTree(false);
 
+                console.log("tempExcludedFiles: ", this.tempExcludedFiles);
+
                 Object.keys(this.tempExcludedFiles).forEach((path) => {
-                    // we have to differentiate between added, deleted and edited.
-                    if (this.tempExcludedFiles[path].location === "localFiles") {
-                        switch (this.tempExcludedFiles[path].type) {
-                            case "added":
-                                // Do not write to prevData
-
-                                break;
-                            case "deleted":
-                                // Write to prevData
-                                files[path] = this.tempExcludedFiles[path].hash;
-                                break;
-                            case "modified":
-                                // Write old hash again to prevData
-                                files[path] = this.prevData.files[path as keyof PreviousObject];
-                                break;
-                            default:
-                                break;
-                        }
-                    } else if (this.tempExcludedFiles[path].location === "remoteFiles") {
-                        switch (this.tempExcludedFiles[path].type) {
-                            case "added":
-                                // Do not write to prevData
-
-                                break;
-                            case "deleted":
-                                // Write to prevData
-                                files[path] = this.tempExcludedFiles[path].hash;
-                                break;
-                            case "modified":
-                                // Write old hash again to prevData
-                                files[path] = this.prevData.files[path as keyof PreviousObject];
-                                break;
-                            default:
-                                break;
-                        }
+                    if (path in this.prevData.files) {
+                        files[path] = this.prevData.files[path];
                     } else {
-                        // except
-                        // will already not be treated by sync
-                        // TODO: add additional click handler for except area
+                        delete files[path];
                     }
                 });
 
