@@ -184,14 +184,14 @@ export class Compare {
         if (!this.plugin.prevData.files || Object.keys(this.plugin.prevData.files).length === 0 || Object.keys(remoteFiles).length === 0) {
             if (Object.keys(remoteFiles).length === 0) {
                 // Only local files exist
-                fileTreeMatch.localFiles.added = localFiles;
+                fileTreeMatch.localFiles.added = this.filterExclusions(localFiles);
                 return fileTreeMatch;
             }
 
             // Both remote and local files exist, but no previous state
             const initialTrees = {
-                remote: { added: remoteFiles, deleted: {}, modified: {}, except: {} },
-                local: { added: localFiles, deleted: {}, modified: {}, except: {} },
+                remote: { added: this.filterExclusions(remoteFiles), deleted: {}, modified: {}, except: {} },
+                local: { added: this.filterExclusions(localFiles), deleted: {}, modified: {}, except: {} },
             };
 
             const { remoteMatch, localMatch } = this.compareFileTreesExcept(initialTrees.remote, initialTrees.local);
@@ -205,10 +205,12 @@ export class Compare {
         try {
             const filteredPrevTree = this.filterExclusions(this.plugin.prevData.files);
             const filteredExcepts = this.filterExclusions(this.plugin.prevData.except);
+            const filteredRemote = this.filterExclusions(remoteFiles);
+            const filteredLocal = this.filterExclusions(localFiles);
 
             const [remoteFilesBranch, localFilesBranch] = await Promise.all([
-                this.comparePreviousFileTree(filteredPrevTree, filteredExcepts, remoteFiles),
-                this.comparePreviousFileTree(filteredPrevTree, filteredExcepts, localFiles),
+                this.comparePreviousFileTree(filteredPrevTree, filteredExcepts, filteredRemote),
+                this.comparePreviousFileTree(filteredPrevTree, filteredExcepts, filteredLocal),
             ]);
 
             remoteFilesBranch.except = { ...this.plugin.prevData.except, ...remoteFilesBranch.except };
