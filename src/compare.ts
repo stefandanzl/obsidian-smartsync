@@ -1,6 +1,6 @@
 import SmartSyncPlugin from "./main";
-import { extname } from "./util";
 import { FileTree, FileList, FileTrees } from "./const";
+import ignoreFactory from "ignore";
 
 export class Compare {
     constructor(public plugin: SmartSyncPlugin) {
@@ -129,46 +129,47 @@ export class Compare {
         return [removedItems, remainingItems];
     };
 
-    filterExclusions = (fileTree: FileList) => {
-        let filtered: FileList = {};
-        const directoriesMod = structuredClone(this.plugin.settings.exclusions.directories); // necessary because otherwise original array will be manipulated!
-
-        if (this.plugin.mobile) {
-            if (this.plugin.settings.skipHiddenMobile) {
-                directoriesMod.push(".obsidian");
-            }
-        } else {
-            if (this.plugin.settings.skipHiddenDesktop) {
-                directoriesMod.push(".obsidian");
-            }
-        }
+    private createIgnoreMatcher() {
+        const ig = ignoreFactory();
 
         if (this.plugin.settings.exclusionsOverride) {
-            filtered = structuredClone(fileTree);
-        } else {
-            for (const filePath in fileTree) {
-                const folders = filePath.split("/");
-                if (!filePath.endsWith("/")) {
-                    folders.pop();
-                }
-                if (folders.some((folder) => directoriesMod.includes(folder))) {
-                    continue;
-                }
+            // When override is enabled, don't filter anything
+            return () => false;
+        }
 
-                // Check file extensions
-                const extension = extname(filePath).toLowerCase();
-                if (this.plugin.settings.exclusions.extensions.includes(extension)) {
-                    continue;
-                }
+        // Add all patterns
+        for (const pattern of this.plugin.settings.ignorePatterns) {
+            ig.add(pattern);
+        }
 
-                // Check markers
-                if (this.plugin.settings.exclusions.markers.some((marker) => filePath.includes(marker))) {
-                    continue;
-                }
+        // Add .obsidian skip if configured
+        const addObsidian = this.plugin.mobile
+            ? this.plugin.settings.skipHiddenMobile
+            : this.plugin.settings.skipHiddenDesktop;
 
+        if (addObsidian) {
+            ig.add(".obsidian/");
+        }
+
+        return ig;
+    }
+
+    filterExclusions = (fileTree: FileList) => {
+        const ig = this.createIgnoreMatcher();
+        let filtered: FileList = {};
+
+        // When override is enabled, ig is a function that returns false (don't ignore)
+        // Otherwise, ig is an Ignore instance with ignores() method
+        const isIgnore = typeof ig === "function"
+            ? () => (ig as () => boolean)()
+            : (path: string) => ig.ignores(path);
+
+        for (const filePath in fileTree) {
+            if (!isIgnore(filePath)) {
                 filtered[filePath] = fileTree[filePath];
             }
         }
+
         return filtered;
     };
 

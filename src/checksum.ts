@@ -1,8 +1,9 @@
 import { SmartSyncClient, ChecksumsResponse } from "./smartSync";
 import SmartSyncPlugin from "./main";
-import { extname, sha256 } from "./util";
+import { sha256 } from "./util";
 import { TAbstractFile, TFile, TFolder, normalizePath } from "obsidian";
-import { FileList, Exclusions } from "./const";
+import { FileList } from "./const";
+import ignoreFactory from "ignore";
 
 interface FileProcessor {
     (file: string): Promise<void>;
@@ -21,50 +22,25 @@ export class Checksum {
 
     // returns true if is excluded and false if is included
     isExcluded(filePath: string) {
-        const { extensions, directories, markers }: Exclusions = this.plugin.settings.exclusions;
-
         if (this.plugin.settings.exclusionsOverride) {
             return false;
         }
-        const directoriesMod = structuredClone(directories); // necessary because otherwise original array will be manipulated!
 
-        if (this.plugin.mobile) {
-            if (this.plugin.settings.skipHiddenMobile) {
-                directoriesMod.push(this.plugin.app.vault.configDir + "/");
-            }
-        } else {
-            if (this.plugin.settings.skipHiddenDesktop) {
-                directoriesMod.push(this.plugin.app.vault.configDir + "/");
-            }
+        const ig = ignoreFactory();
+
+        // Add all patterns
+        for (const pattern of this.plugin.settings.ignorePatterns) {
+            ig.add(pattern);
         }
 
-        const folders = filePath.split("/");
-        if (!filePath.endsWith("/")) {
-            folders.pop();
-        }
-        if (folders.some((folder) => directoriesMod.includes(folder))) {
-            return true;
-        }
-        if (
-            folders.some((folder) => {
-                filePath.endsWith(folder + "/");
-                return true;
-            })
-        )
-            if (extensions.length > 0) {
-                // Check file extensions
-                const extension = extname(filePath).toLowerCase();
-                if (extensions.includes(extension)) {
-                    return true;
-                }
-            }
+        // Add .obsidian skip if configured
+        const addObsidian = this.plugin.mobile ? this.plugin.settings.skipHiddenMobile : this.plugin.settings.skipHiddenDesktop;
 
-        // Check markers
-        if (markers.some((marker) => filePath.includes(marker))) {
-            return true;
+        if (addObsidian) {
+            ig.add(".obsidian/");
         }
 
-        return false;
+        return ig.ignores(filePath);
     }
 
     removeBase(fileChecksums: FileList, basePath: string) {
@@ -185,7 +161,7 @@ export class Checksum {
                         return;
                     } else if (element instanceof TFolder) {
                         const filePath = element.path + "/";
-                        if ((exclude && this.isExcluded(filePath)) || filePath === "//") {
+                        if (filePath === "//" || (exclude && this.isExcluded(filePath))) {
                             return;
                         }
                         this.allLocalFiles[filePath] = "dir";

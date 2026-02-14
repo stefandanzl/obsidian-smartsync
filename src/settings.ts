@@ -74,47 +74,17 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Excluded Directories")
-            .setDesc("Enter single folder names in separate lines")
+            .setName("Ignore Patterns")
+            .setDesc("Enter ignore patterns (.gitignore style) - one pattern per line")
             .addTextArea((text) =>
                 text
-                    .setPlaceholder("My Files\nalbum\nDocuments")
-                    .setValue(this.plugin.settings.exclusions.directories.join("\n"))
+                    .setPlaceholder("*.exe\n*.log\nprevdata.json\n.obsidian/workspace.json\nnode_modules/")
+                    .setValue(this.plugin.settings.ignorePatterns.join("\n"))
                     .onChange(async (value) => {
                         value = value.replace(/\r/g, "").replace(/\\/g, "/");
-                        this.plugin.settings.exclusions.directories = value.split("\n").filter((v) => v !== "");
+                        this.plugin.settings.ignorePatterns = value.split("\n").filter((v) => v !== "");
                         await this.plugin.saveSettings();
-                        console.log("Settings saved:", this.plugin.settings.exclusions);
-                    })
-            );
-
-        new Setting(containerEl)
-            .setName("Excluded file extensions")
-            .setDesc("Enter extensions separated with commas (,)")
-            .addText((text) =>
-                text
-                    .setPlaceholder(".json, .exe, .zip")
-                    .setValue(this.plugin.settings.exclusions.extensions.join(", "))
-                    .onChange(async (value) => {
-                        value = value.replace(/ /g, "");
-                        this.plugin.settings.exclusions.extensions = value.split(",").filter((v) => v !== "");
-                        await this.plugin.saveSettings();
-                        console.log("Settings saved:", this.plugin.settings.exclusions);
-                    })
-            );
-
-        new Setting(containerEl)
-            .setName("Excluded filename markers")
-            .setDesc("Enter markers in separate lines")
-            .addTextArea((text) =>
-                text
-                    .setPlaceholder("_secret_\n°cache~\n_archive_\nfolder1/folder2")
-                    .setValue(this.plugin.settings.exclusions.markers.join("\n"))
-                    .onChange(async (value) => {
-                        value = value.replace(/\r/g, "").replace(/\\/g, "/");
-                        this.plugin.settings.exclusions.markers = value.split("\n").filter((v) => v !== "");
-                        await this.plugin.saveSettings();
-                        console.log("Settings saved:", this.plugin.settings.exclusions);
+                        console.log("Settings saved:", this.plugin.settings.ignorePatterns);
                     })
             );
 

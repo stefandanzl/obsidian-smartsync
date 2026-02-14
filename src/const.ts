@@ -167,11 +167,7 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
     port: 443,
     authToken: "",
 
-    exclusions: {
-        directories: [],
-        extensions: [".exe"],
-        markers: ["prevdata.json", ".obsidian/workspace.json"],
-    },
+    ignorePatterns: ["*.exe", "prevdata.json", ".obsidian/workspace.json", ".git*"],
     exclusionsOverride: false,
 
     liveSync: false,
@@ -191,7 +187,7 @@ export interface SmartSyncSettings {
     url: string;
     port: number;
     authToken: string;
-    exclusions: Exclusions;
+    ignorePatterns: string[];
     exclusionsOverride: boolean;
 
     liveSync: boolean;
@@ -207,10 +203,4 @@ export interface SmartSyncSettings {
     dailyNotesFormat: string;
     dailyNotesTemplate: string;
     dailyNotesTimestamp: boolean;
-}
-
-export interface Exclusions {
-    directories: string[];
-    extensions: string[];
-    markers: string[];
 }
