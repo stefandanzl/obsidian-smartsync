@@ -36,6 +36,7 @@
 		"webdav": "^5.7.1"
 	},
 	"dependencies": {
+		"ignore": "^7.0.5",
 		"xmldom": "^0.6.0"
 	}
 }
