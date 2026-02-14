@@ -262,7 +262,7 @@ export default class SmartSync extends Plugin {
         this.log("save state");
         const action = "save";
         if (this.prevData.error) {
-            this.show("Error detected - please clear in control panel or force action by retriggering " + action);
+            this.show(`Error detected - please clear in control panel or force action by retriggering ${action}`);
             console.log("SAVE ERROR OCCURREDDD");
             return;
         }
@@ -385,6 +385,7 @@ export default class SmartSync extends Plugin {
 
         fragment.appendChild(divElement);
         this.notice = new Notice(fragment, duration);
+        // new Notice(message, duration);
     }
 
     async setStatus(status: Status, show = true, text?: string) {

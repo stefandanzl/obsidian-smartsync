@@ -252,7 +252,6 @@ export class Operations {
             show && this.plugin.show(`${Status.TEST} Testing ...`);
 
             const status = await this.plugin.smartSyncClient.getStatus();
-            console.log("[TEST] Server status response:", status);
 
             // Check if online field exists and is true
             if (status && status.online === true) {
@@ -403,7 +402,7 @@ export class Operations {
             return true;
         } catch (error) {
             console.error("CHECK ERROR: ", error);
-            show && this.plugin.show("CHECK ERROR: " + error);
+            show && this.plugin.show(`CHECK ERROR: ${error}`);
             this.plugin.setError(true);
             response ? this.plugin.setStatus(Status.ERROR) : this.plugin.setStatus(Status.OFFLINE);
             throw error;
@@ -551,7 +550,7 @@ export class Operations {
             this.plugin.setStatus(Status.NONE);
         } catch (error) {
             console.error("SYNC", error);
-            show && this.plugin.show("SYNC Error: " + error);
+            show && this.plugin.show(`SYNC Error: ${error}`);
             this.plugin.setError(true);
             this.plugin.setStatus(Status.ERROR);
         } finally {

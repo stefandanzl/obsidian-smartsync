@@ -57,11 +57,11 @@ export class DailyNoteManager {
             }
             const file = await this.plugin.app.vault.create(filePath, finalContent);
             return [file, usedTemplate];
-        } catch (err) {
-            this.plugin.show("Daily Note File Error: ", err);
+        } catch (error) {
+            this.plugin.show(`Daily Note File Error: ${error}`);
 
-            console.error(`Failed to create daily note at '${filePath}':`, err);
-            throw new Error(`Failed to create daily note: ${err.message}`);
+            console.error(`Failed to create daily note at '${filePath}':`, error);
+            throw new Error(`Failed to create daily note: ${error}`);
         }
     }
 
@@ -145,7 +145,7 @@ export class DailyNoteManager {
 
                 if (connected) break;
             } catch (error) {
-                console.log(`Connection attempt ${retryCount + 1} failed: ${error.message}`);
+                console.log(`Connection attempt ${retryCount + 1} failed: ${error}`);
             }
             retryCount++;
             logNotice(`Connection attempt ${retryCount}/${maxRetries} failed ⌛`, 1800);
@@ -273,7 +273,7 @@ export class DailyNoteManager {
             await this.openNoteWithTimestamp(dailyNote, middleClick, usedTemplate);
         } catch (err) {
             console.error("Failed to create/open daily note:", err);
-            logNotice(`Daily note operation failed: ${err.message}`);
+            // logNotice(`Daily note operation failed: ${err.message}`);
             throw new Error(`Daily note operation failed: ${err.message}`);
         }
     }
