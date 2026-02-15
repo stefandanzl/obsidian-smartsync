@@ -81,11 +81,6 @@ export async function launcher(plugin: SmartSync) {
 
     // plugin adds a status bar item to the bottom of the app. Does not work on mobile apps.
 
-    plugin.statusBar = plugin.addStatusBarItem();
-
-    plugin.statusBar2 = plugin.addStatusBarItem();
-    plugin.statusBar2.setText("");
-
     plugin.loadingTotal = -1;
 
     // In your main plugin class
@@ -93,6 +88,9 @@ export async function launcher(plugin: SmartSync) {
     plugin.statusBar.addClass("plugin-sync"); // Main container class
     plugin.statusBar.setAttribute("aria-label", "Uninitialized");
     plugin.statusBar.setAttribute("data-tooltip-position", "top");
+
+    plugin.statusBar2 = plugin.addStatusBarItem();
+    plugin.statusBar2.setText("");
 
     // Create inner container
     const innerDiv = plugin.statusBar.createDiv("status-bar-item-segment");

@@ -105,7 +105,7 @@ export class FileTreeModal extends Modal {
         });
 
         /**
-         * Webdav Settings Button
+         * Settings Button
          */
         const openSettingsButton = advancedSection.createEl("button", {
             text: "⚙️ SETTINGS",

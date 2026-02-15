@@ -233,7 +233,7 @@ export class DailyNoteManager {
         try {
             // Handle offline scenarios
             if (this.plugin.status === Status.ERROR) {
-                logNotice("Error detected! ❌\nClear error in webdav control modal and try to get Daily Note again!");
+                logNotice("Error detected! ❌\nClear error in SmartSync control modal and try to get Daily Note again!");
                 // this.plugin.show(this.plugin.message, 5000);
                 return;
             }

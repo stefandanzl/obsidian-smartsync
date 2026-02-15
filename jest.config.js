@@ -5,11 +5,9 @@ module.exports = {
     transform: {
         '^.+\\.ts$': 'ts-jest',
     },
-    moduleFileExtensions: ['js','ts'],
+    moduleFileExtensions: ['js', 'ts'],
 
     testMatch: ['**/tests/**/*.test.ts'],
 
-    transformIgnorePatterns: [
-        "node_modules/(?!webdav)"
-      ]
+
 };

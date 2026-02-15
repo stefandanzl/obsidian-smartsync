@@ -31,7 +31,7 @@ export default class SmartSync extends Plugin {
     operations: Operations;
     dailyNote: DailyNoteManager;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any Not exposed in Obsidian API
     settingPrivate: any;
 
     statusBar: HTMLElement;
@@ -107,7 +107,6 @@ export default class SmartSync extends Plugin {
         } catch (error) {
             console.error("SmartSync Client creation error.", error);
             this.show("Error creating SmartSync Client!");
-            this.prevData;
         }
     }
 

@@ -1,42 +1,41 @@
 {
-	"name": "webdav",
-	"version": "1.7.0",
-	"description": "Quick and simple Webdav Sync for Obsidian",
-	"main": "main.js",
-	"scripts": {
-		"dev": "node esbuild.config.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"build:dev": "node esbuild.config.mjs development",
-		"lint": "eslint ./src --fix && eslint ./tests --fix && tsc --noEmit --pretty && svelte-check",
-		"lint:markdown": "markdownlint-cli2 --fix \"**/*.md\" \"#contributing/_meta\" \"#docs/_meta\" \"#docs/snippets-embedded-in-multiple-pages\" \"#docs-snippets\" \"#node_modules\"  \"#tests\"  \"#resources/sample_vaults/Tasks-Demo/_meta/templates\"  \"#resources/sample_vaults/Tasks-Demo/Test Data\"  \"#resources/sample_vaults/Tasks-Demo/Manual Testing/Smoke test Kanban Integration.md\" ",
-		"version": "node version-bump.mjs && git add manifest.json versions.json",
-		"test": "jest --ci --transformIgnorePatterns \"node_modules/(?!webdav)/\"",
-		"test:dev": "jest --watch"
-	},
-	"keywords": [],
-	"author": "",
-	"license": "MIT",
-	"devDependencies": {
-		"@types/crypto-js": "^4.2.1",
-		"@types/js-sha1": "^0.6.2",
-		"@types/node": "^16.11.6",
-		"@types/sha1": "^1.1.5",
-		"@types/xmldom": "^0.1.34",
-		"@typescript-eslint/eslint-plugin": "5.29.0",
-		"@typescript-eslint/parser": "5.29.0",
-		"builtin-modules": "3.3.0",
-		"dotenv": "^16.4.7",
-		"esbuild": "0.17.3",
-		"jest-environment-obsidian": "^0.0.1",
-		"obsidian": "latest",
-		"prettier": "^3.4.2",
-		"ts-jest": "^29.2.5",
-		"tslib": "2.4.0",
-		"typescript": "4.7.4",
-		"webdav": "^5.7.1"
-	},
-	"dependencies": {
-		"ignore": "^7.0.5",
-		"xmldom": "^0.6.0"
-	}
+    "name": "smartsync",
+    "version": "2.0.0",
+    "description": "Smart and simple sync plugin for Obsidian",
+    "main": "main.js",
+    "scripts": {
+        "dev": "node esbuild.config.mjs",
+        "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+        "build:dev": "node esbuild.config.mjs development",
+        "lint": "eslint ./src --fix && eslint ./tests --fix && tsc --noEmit --pretty && svelte-check",
+        "lint:markdown": "markdownlint-cli2 --fix \"**/*.md\" \"#contributing/_meta\" \"#docs/_meta\" \"#docs/snippets-embedded-in-multiple-pages\" \"#docs-snippets\" \"#node_modules\"  \"#tests\"  \"#resources/sample_vaults/Tasks-Demo/_meta/templates\"  \"#resources/sample_vaults/Tasks-Demo/Test Data\"  \"#resources/sample_vaults/Tasks-Demo/Manual Testing/Smoke test Kanban Integration.md\" ",
+        "version": "node version-bump.mjs && git add manifest.json versions.json",
+        "test": "jest --ci ",
+        "test:dev": "jest --watch"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "@types/crypto-js": "^4.2.1",
+        "@types/js-sha1": "^0.6.2",
+        "@types/node": "^16.11.6",
+        "@types/sha1": "^1.1.5",
+        "@types/xmldom": "^0.1.34",
+        "@typescript-eslint/eslint-plugin": "5.29.0",
+        "@typescript-eslint/parser": "5.29.0",
+        "builtin-modules": "3.3.0",
+        "dotenv": "^16.4.7",
+        "esbuild": "0.17.3",
+        "jest-environment-obsidian": "^0.0.1",
+        "obsidian": "latest",
+        "prettier": "^3.4.2",
+        "ts-jest": "^29.2.5",
+        "tslib": "2.4.0",
+        "typescript": "4.7.4"
+    },
+    "dependencies": {
+        "ignore": "^7.0.5",
+        "xmldom": "^0.6.0"
+    }
 }

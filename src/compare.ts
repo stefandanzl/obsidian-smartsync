@@ -143,9 +143,7 @@ export class Compare {
         }
 
         // Add .obsidian skip if configured
-        const addObsidian = this.plugin.mobile
-            ? this.plugin.settings.skipHiddenMobile
-            : this.plugin.settings.skipHiddenDesktop;
+        const addObsidian = this.plugin.mobile ? this.plugin.settings.skipHiddenMobile : this.plugin.settings.skipHiddenDesktop;
 
         if (addObsidian) {
             ig.add(".obsidian/");
@@ -160,9 +158,17 @@ export class Compare {
 
         // When override is enabled, ig is a function that returns false (don't ignore)
         // Otherwise, ig is an Ignore instance with ignores() method
-        const isIgnore = typeof ig === "function"
-            ? () => (ig as () => boolean)()
-            : (path: string) => ig.ignores(path);
+        const isIgnore =
+            typeof ig === "function"
+                ? () => (ig as () => boolean)()
+                : (path: string) => {
+                      try {
+                          return ig.ignores(path);
+                      } catch (error) {
+                          console.error("Ignore check error for path:", path, error);
+                          return false; // Don't exclude on error
+                      }
+                  };
 
         for (const filePath in fileTree) {
             if (!isIgnore(filePath)) {
@@ -180,7 +186,7 @@ export class Compare {
             localFiles: { added: {}, deleted: {}, modified: {}, except: {} },
         };
 
-        // Case 1: No previous file tree or no webdav files
+        // Case 1: No previous file tree or no remote files
         if (!this.plugin.prevData.files || Object.keys(this.plugin.prevData.files).length === 0 || Object.keys(remoteFiles).length === 0) {
             if (Object.keys(remoteFiles).length === 0) {
                 // Only local files exist

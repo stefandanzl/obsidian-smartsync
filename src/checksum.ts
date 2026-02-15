@@ -26,39 +26,26 @@ export class Checksum {
             return false;
         }
 
-        const ig = ignoreFactory();
+        try {
+            const ig = ignoreFactory();
 
-        // Add all patterns
-        for (const pattern of this.plugin.settings.ignorePatterns) {
-            ig.add(pattern);
-        }
-
-        // Add .obsidian skip if configured
-        const addObsidian = this.plugin.mobile ? this.plugin.settings.skipHiddenMobile : this.plugin.settings.skipHiddenDesktop;
-
-        if (addObsidian) {
-            ig.add(".obsidian/");
-        }
-
-        return ig.ignores(filePath);
-    }
-
-    removeBase(fileChecksums: FileList, basePath: string) {
-        const removedBase: FileList = {};
-
-        for (const [filePath, checksum] of Object.entries(fileChecksums)) {
-            // Check if file path starts with base path
-            if (filePath.startsWith(basePath)) {
-                // Remove base path from file path
-                const relativePath: string = filePath.substring(basePath.length).replace(/^\//, "");
-                removedBase[relativePath] = checksum;
-            } else {
-                // If file path doesn't start with base path, keep it unchanged
-                removedBase[filePath] = checksum;
+            // Add all patterns
+            for (const pattern of this.plugin.settings.ignorePatterns) {
+                ig.add(pattern);
             }
-        }
 
-        return removedBase;
+            // Add .obsidian skip if configured
+            const addObsidian = this.plugin.mobile ? this.plugin.settings.skipHiddenMobile : this.plugin.settings.skipHiddenDesktop;
+
+            if (addObsidian) {
+                ig.add(".obsidian/");
+            }
+
+            return ig.ignores(filePath);
+        } catch (error) {
+            console.error("Ignore check error for path:", filePath, error);
+            return false; // Don't exclude on error
+        }
     }
 
     async getHiddenLocalFiles(path: string, exclude = true, concurrency = 15): Promise<void> {

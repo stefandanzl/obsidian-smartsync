@@ -64,30 +64,30 @@ export async function sha256(buffer: ArrayBuffer): Promise<string> {
     return hashHex;
 }
 
-export function fileTreesEmpty({ localFiles, webdavFiles }: { localFiles: FileTree; webdavFiles: FileTree }): boolean {
-    const hasNoRegularChanges = [
-        localFiles.added,
-        localFiles.deleted,
-        localFiles.modified,
-        webdavFiles.added,
-        webdavFiles.deleted,
-        webdavFiles.modified,
-    ].every((record) => Object.keys(record).length === 0);
+// export function fileTreesEmpty({ localFiles, remoteFiles }: { localFiles: FileTree; remoteFiles: FileTree }): boolean {
+//     const hasNoRegularChanges = [
+//         localFiles.added,
+//         localFiles.deleted,
+//         localFiles.modified,
+//         remoteFiles.added,
+//         remoteFiles.deleted,
+//         remoteFiles.modified,
+//     ].every((record) => Object.keys(record).length === 0);
 
-    if (!hasNoRegularChanges) {
-        return false;
-    }
+//     if (!hasNoRegularChanges) {
+//         return false;
+//     }
 
-    const hasNoExceptions = [webdavFiles.except, localFiles.except].every((record) => Object.keys(record).length === 0);
+//     const hasNoExceptions = [remoteFiles.except, localFiles.except].every((record) => Object.keys(record).length === 0);
 
-    if (hasNoExceptions) {
-        // show && this.show("Nothing to sync");
-        return true;
-    }
+//     if (hasNoExceptions) {
+//         // show && this.show("Nothing to sync");
+//         return true;
+//     }
 
-    this.show("Please open control panel to solve your file exceptions");
-    return true;
-}
+//     console.log("Please open control panel to solve your file exceptions");
+//     return true;
+// }
 
 // Helper function to create nested folders
 export async function createFolderIfNotExists(vault: Vault, folderPath: string): Promise<void> {

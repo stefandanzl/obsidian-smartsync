@@ -1,6 +1,6 @@
 # Refactoring Guide
 
-This document outlines identified syntactic cleanup opportunities and technical debt in the WebDAV Obsidian Plugin codebase.
+This document outlines identified syntactic cleanup opportunities and technical debt in the SmartSync Obsidian Plugin codebase.
 
 ## Table of Contents
 
@@ -14,77 +14,24 @@ This document outlines identified syntactic cleanup opportunities and technical 
 
 ### High Priority (Type Safety & Bugs)
 
-| File | Issue | Impact |
-|------|-------|--------|
-| `main.ts:110` | Standalone `this.prevData;` statement | No-op, dead code |
-| `util.ts:88` | `this.show()` in utility function context | Runtime error potential |
-| `checksum.ts:48-52` | Unreachable code after `return true` | Logic bug |
-| `modal.ts:224,247` | `(this as any)` casts | Type safety loss |
-| `dailynote.ts:248` | Missing `sleep` import | Runtime error |
+| File                | Issue                                | Impact           |
+| ------------------- | ------------------------------------ | ---------------- |
+| `checksum.ts:48-52` | Unreachable code after `return true` | Logic bug        |
+| `modal.ts:224,247`  | `(this as any)` casts                | Type safety loss |
+| `dailynote.ts:248`  | Missing `sleep` import               | Runtime error    |
 
 ### Medium Priority (Code Quality)
 
-| File | Issue | Impact |
-|------|-------|--------|
-| `compare.ts` | `for...in` loops without type guards | Type safety |
-| `compare.ts:122` | `hasOwnProperty` pattern | Outdated pattern |
-| `const.ts:17-33` | Unused `Status2`, `Action` enums | Dead exports |
-| Multiple files | Commented code blocks | Code clarity |
+| File             | Issue                                | Impact           |
+| ---------------- | ------------------------------------ | ---------------- |
+| `compare.ts`     | `for...in` loops without type guards | Type safety      |
+| `compare.ts:122` | `hasOwnProperty` pattern             | Outdated pattern |
+| `const.ts:17-33` | Unused `Status2`, `Action` enums     | Dead exports     |
+| Multiple files   | Commented code blocks                | Code clarity     |
 
 ---
 
 ## File-by-File Analysis
-
-### src/main.ts
-
-```typescript
-// Line 26: Overly complex type
-message: string | Array<string[]> | string[] | unknown[];
-
-// SUGGESTION: Simplify to what's actually used
-message: string | string[];
-```
-
-```typescript
-// Lines 34-35: Unsafe any type
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-settingPrivate: any;
-
-// SUGGESTION: Use proper Obsidian type
-settingPrivate: SettingTab | null;
-```
-
-```typescript
-// Line 110: Dead code
-this.prevData;  // Does nothing
-
-// SUGGESTION: Remove
-```
-
-```typescript
-// Lines 37, 84, 92: Duplicate statusBar declarations
-statusBar: HTMLElement;  // Line 37
-// ... later ...
-statusBar = plugin.addStatusBarItem();  // Line 84
-statusBar = plugin.addStatusBarItem();  // Line 92 - overwrites!
-
-// SUGGESTION: Rename or consolidate
-statusBar: HTMLElement;        // Main status bar
-statusBarProgress: HTMLElement; // For progress text
-```
-
-```typescript
-// Line 344: Missing import
-await sleep(2000);
-
-// ADD TO IMPORTS:
-import { sleep } from "./util";
-```
-
-**Commented code to remove:**
-- Lines 96, 120-121, 178-183, 244, 273-276, 318, 399, 403
-
----
 
 ### src/operations.ts
 
@@ -122,13 +69,19 @@ console.log("Sync check failed - cannot proceed");
 
 ```typescript
 // Lines 567, 583: Redundant method reference
-await this.sync({ /* ... */ });
+await this.sync({
+    /* ... */
+});
 
 // CURRENT (in duplicateLocal, duplicateRemote):
-await this.plugin.operations.sync({ /* ... */ });
+await this.plugin.operations.sync({
+    /* ... */
+});
 
 // SUGGESTION: Use this.sync() directly
-await this.sync({ /* ... */ });
+await this.sync({
+    /* ... */
+});
 ```
 
 ---
@@ -137,19 +90,27 @@ await this.sync({ /* ... */ });
 
 ```typescript
 // Lines 17-33: Unused enums
-export enum Status2 { /* ... */ }
-export enum Action { /* ... */ }
+export enum Status2 {
+    /* ... */
+}
+export enum Action {
+    /* ... */
+}
 
 // SUGGESTION: Remove if grep shows no usage
 ```
 
 ```typescript
 // Line 165: Partial typing on DEFAULT_SETTINGS
-export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = { /* ... */ };
+export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
+    /* ... */
+};
 
 // SUGGESTION: This is fine for defaults, but consider:
-type PartialSettings = Omit<SmartSyncSettings, 'modifySyncInterval' | 'modifySync'>;
-export const DEFAULT_SETTINGS: PartialSettings = { /* ... */ };
+type PartialSettings = Omit<SmartSyncSettings, "modifySyncInterval" | "modifySync">;
+export const DEFAULT_SETTINGS: PartialSettings = {
+    /* ... */
+};
 ```
 
 ---
@@ -157,30 +118,11 @@ export const DEFAULT_SETTINGS: PartialSettings = { /* ... */ };
 ### src/util.ts
 
 ```typescript
-// Line 67: Parameter name mismatch
-export function fileTreesEmpty({ localFiles, webdavFiles }: { localFiles: FileTree; webdavFiles: FileTree })
-
-// SUGGESTION: Rename for consistency with rest of codebase
-export function fileTreesEmpty({ localFiles, remoteFiles }: { localFiles: FileTree; remoteFiles: FileTree })
-```
-
-```typescript
-// Line 88: Function using `this` in non-method context
-export function fileTreesEmpty(...) {
-    // ...
-    this.show("Please open control panel to solve your file exceptions");
-    // ^^^ This will cause runtime error
-}
-
-// SUGGESTION: Either:
-// 1. Make it a class method, or
-// 2. Accept plugin as parameter and call plugin.show()
-```
-
-```typescript
 // Line 112: Conflicting comment
 // Already implemented by Obsidian API
-export function sleep(ms: number) { /* ... */ }
+export function sleep(ms: number) {
+    /* ... */
+}
 
 // SUGGESTION: Either remove function and update all call sites,
 // or remove the misleading comment
@@ -228,7 +170,7 @@ if (Object.hasOwn(referenceObject, key)) {
 if (
     folders.some((folder) => {
         filePath.endsWith(folder + "/");
-        return true;  // Always returns true!
+        return true; // Always returns true!
     })
 )
     if (extensions.length > 0) {
@@ -242,20 +184,6 @@ if (folders.some((folder) => filePath.endsWith(folder + "/"))) {
 
 if (extensions.length > 0) {
     // Handle extensions
-}
-```
-
-```typescript
-// Line 146: ts-ignore without proper explanation
-//@ts-ignore little trick
-const fileCache = this.plugin.app.metadataCache.fileCache;
-
-// SUGGESTION: Use proper type assertion
-const fileCache = (this.plugin.app.metadataCache as MetadataCache & { fileCache?: Record<string, { hash: string }> }).fileCache;
-
-// OR define type extension interface
-interface MetadataCacheWithFileCache extends MetadataCache {
-    fileCache?: Record<string, { hash: string }>;
 }
 ```
 
@@ -283,7 +211,7 @@ export class FileTreeModal extends Modal {
 
 ```typescript
 // Line 250: Standalone statement
-this.plugin.modal;  // Does nothing
+this.plugin.modal; // Does nothing
 
 // SUGGESTION: Remove
 ```
@@ -291,7 +219,9 @@ this.plugin.modal;  // Does nothing
 ```typescript
 // Line 587: ts-ignore
 //@ts-ignore
-{ location, type }
+{
+    (location, type);
+}
 
 // SUGGESTION: Fix the type properly - the Controller type already allows optional properties
 ```
@@ -345,58 +275,32 @@ new Promise<void>((_, reject) => {
 
 ## General Patterns
 
-### 1. Logging Consistency
-
-Create a centralized logging utility:
-
-```typescript
-// src/util.ts
-export enum LogCategory {
-    TEST = "TEST",
-    SYNC = "SYNC",
-    CHECK = "CHECK",
-    ERROR = "ERROR",
-}
-
-export function logWithPrefix(category: LogCategory | string, ...args: unknown[]) {
-    console.log(`[${category}]`, ...args);
-}
-```
-
-### 2. Type Safety Improvements
-
-Replace `any` with proper types:
-
-```typescript
-// Instead of:
-settingPrivate: any;
-
-// Use:
-import { SettingTab } from "obsidian";
-settingPrivate: SettingTab | null;
-```
-
 ### 3. Modern JavaScript Features
 
 ```typescript
 // Old pattern:
-Object.prototype.hasOwnProperty.call(obj, key)
+Object.prototype.hasOwnProperty.call(obj, key);
 
 // Modern ES2022:
-Object.hasOwn(obj, key)
+Object.hasOwn(obj, key);
 ```
 
 ```typescript
 // Old pattern:
-for (const key in obj) { /* ... */ }
+for (const key in obj) {
+    /* ... */
+}
 
 // Modern with type safety:
-for (const key of Object.keys(obj)) { /* ... */ }
+for (const key of Object.keys(obj)) {
+    /* ... */
+}
 ```
 
 ### 4. Dead Code Removal
 
 Before removing any code, verify usage:
+
 ```bash
 # Search for usage across the codebase
 grep -r "Status2" src/
@@ -421,13 +325,11 @@ Use this checklist when implementing the refactoring:
 - [ ] Standardize console logging with helper function
 - [ ] Remove unused `ignoreConnection` property
 - [ ] Fix duplicate statusBar declarations
-- [ ] Add proper types instead of `@ts-ignore`
 
 ---
 
 ## Notes
 
-- Always run tests after each refactoring change
-- Consider making smaller PRs for easier review
+- Always try to build with command "task default" after each refactoring change
 - Some `@ts-ignore` comments may be necessary for Obsidian's untyped APIs
 - Verify that enum removals don't affect public API or user configs
