@@ -14,24 +14,6 @@ export enum Status {
     PAUSE = "⏸️",
 }
 
-export enum Status2 {
-    READY = "✔️",
-    OFFLINE = "📴",
-    ERROR = "❌",
-    PAUSE = "⏸️",
-}
-
-export enum Action {
-    NONE = "",
-    TEST = "🧪",
-    CHECK = "🔎",
-    SYNC = "⏳",
-    AUTO = "🔄",
-    SAVE = "💾",
-    PULL = "🔻",
-    PUSH = "🔺",
-}
-
 export interface StatusItem {
     emoji: string;
     class: string;

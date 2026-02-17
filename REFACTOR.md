@@ -14,11 +14,10 @@ This document outlines identified syntactic cleanup opportunities and technical 
 
 ### High Priority (Type Safety & Bugs)
 
-| File                | Issue                                | Impact           |
-| ------------------- | ------------------------------------ | ---------------- |
-| `checksum.ts:48-52` | Unreachable code after `return true` | Logic bug        |
-| `modal.ts:224,247`  | `(this as any)` casts                | Type safety loss |
-| `dailynote.ts:248`  | Missing `sleep` import               | Runtime error    |
+| File               | Issue                  | Impact           |
+| ------------------ | ---------------------- | ---------------- |
+| `modal.ts:224,247` | `(this as any)` casts  | Type safety loss |
+| `dailynote.ts:248` | Missing `sleep` import | Runtime error    |
 
 ### Medium Priority (Code Quality)
 
@@ -26,7 +25,6 @@ This document outlines identified syntactic cleanup opportunities and technical 
 | ---------------- | ------------------------------------ | ---------------- |
 | `compare.ts`     | `for...in` loops without type guards | Type safety      |
 | `compare.ts:122` | `hasOwnProperty` pattern             | Outdated pattern |
-| `const.ts:17-33` | Unused `Status2`, `Action` enums     | Dead exports     |
 | Multiple files   | Commented code blocks                | Code clarity     |
 
 ---
@@ -88,45 +86,9 @@ await this.sync({
 
 ### src/const.ts
 
-```typescript
-// Lines 17-33: Unused enums
-export enum Status2 {
-    /* ... */
-}
-export enum Action {
-    /* ... */
-}
-
-// SUGGESTION: Remove if grep shows no usage
-```
-
-```typescript
-// Line 165: Partial typing on DEFAULT_SETTINGS
-export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
-    /* ... */
-};
-
-// SUGGESTION: This is fine for defaults, but consider:
-type PartialSettings = Omit<SmartSyncSettings, "modifySyncInterval" | "modifySync">;
-export const DEFAULT_SETTINGS: PartialSettings = {
-    /* ... */
-};
-```
-
 ---
 
 ### src/util.ts
-
-```typescript
-// Line 112: Conflicting comment
-// Already implemented by Obsidian API
-export function sleep(ms: number) {
-    /* ... */
-}
-
-// SUGGESTION: Either remove function and update all call sites,
-// or remove the misleading comment
-```
 
 ---
 
@@ -228,49 +190,6 @@ this.plugin.modal; // Does nothing
 
 ---
 
-### src/dailynote.ts
-
-```typescript
-// Lines 7, 11: Unused property
-private ignoreConnection: boolean;
-// ...
-this.ignoreConnection = false;  // Set statically, never meaningfully changed
-
-// SUGGESTION: Remove if not functionally used, or implement properly
-```
-
-```typescript
-// Line 248: Missing import
-await sleep(1000 * waitTime);
-
-// ADD TO IMPORTS:
-import { sleep } from "./util";
-```
-
-```typescript
-// Line 141: Unnecessary parameter
-new Promise<never>((_resolve, reject) => {
-
-// SUGGESTION: Use arrow function without parameter
-new Promise<never>((_, reject) => {
-// OR just:
-new Promise<void>((_, reject) => {
-```
-
-```typescript
-// Lines 27, 43: Commented code
-// SUGGESTION: Remove dead code
-```
-
----
-
-### src/settings.ts
-
-```typescript
-// Lines 76-77: Inconsistent spacing
-// SUGGESTION: Standardize blank line usage (2 lines between sections)
-```
-
 ---
 
 ## General Patterns
@@ -297,19 +216,9 @@ for (const key of Object.keys(obj)) {
 }
 ```
 
-### 4. Dead Code Removal
-
-Before removing any code, verify usage:
-
-```bash
-# Search for usage across the codebase
-grep -r "Status2" src/
-grep -r "Action" src/
-```
-
 ---
 
-## Checklist for PR
+## Checklist
 
 Use this checklist when implementing the refactoring:
 
