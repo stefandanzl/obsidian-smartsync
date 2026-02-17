@@ -1,7 +1,7 @@
 {
 	"id": "smartsync",
 	"name": "SmartSync",
-	"version": "2.0.0",
+	"version": "2.1.0",
 	"minAppVersion": "1.5.0",
 	"description": "SmartSync for Obsidian - sync via SmartSyncServer API based on checksum comparison",
 	"author": "Stefan Danzl",
