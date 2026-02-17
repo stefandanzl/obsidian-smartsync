@@ -34,11 +34,19 @@
 /* ============= HEADER ============= */
 .smart-sync-header {
     display: flex;
+    align-items: center;
     gap: 12px;
     padding: 16px 20px;
     background: var(--background-secondary);
     border-bottom: 1px solid var(--background-modifier-border);
     flex-shrink: 0;
+}
+
+.smart-sync-status-indicator {
+    flex: 1;
+    text-align: center;
+    font-size: var(--font-ui-medium);
+    font-weight: var(--font-semibold);
 }
 
 .smart-sync-header-btn {
@@ -520,4 +528,56 @@
 .theme-dark .smart-sync-dropdown-content,
 .theme-dark .smart-sync-context-menu {
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ============= DIFF MODAL ============= */
+.smart-sync-diff-modal {
+    width: 95vw;
+    max-width: 1800px;
+    height: 90vh;
+    max-height: 900px;
+}
+
+.smart-sync-diff-header {
+    display: flex;
+    padding: 12px 20px;
+    background: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-size: var(--font-ui-large);
+    font-weight: var(--font-semibold);
+}
+
+.smart-sync-diff-header-remote,
+.smart-sync-diff-header-local {
+    flex: 1;
+    text-align: center;
+}
+
+.smart-sync-diff-header-remote {
+    color: var(--text-accent);
+}
+
+.smart-sync-diff-header-local {
+    color: var(--color-green);
+}
+
+.smart-sync-merge-view-container {
+    height: calc(100% - 50px);
+    overflow: hidden;
+}
+
+.smart-sync-merge-view-container .cm-editor {
+    height: 100%;
+    font-size: var(--font-ui-small);
+}
+
+/* Make the merge view panels wider */
+.smart-sync-merge-view-container .cm-merge-view {
+    display: flex;
+    gap: 0;
+}
+
+.smart-sync-merge-view-container .cm-merge-pane {
+    min-width: 45%;
+    flex: 1;
 }

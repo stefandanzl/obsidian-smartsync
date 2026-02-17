@@ -1,6 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import SmartSyncPlugin from "./main";
-import { FileTree, FileTrees, Location, PLUGIN_ID, Status, Type } from "./const";
+import { DiffModal } from "./diffModal";
+import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, Type } from "./const";
 import { dirname } from "./util";
 
 type ExplicitAction = "push" | "pull" | "default";
@@ -11,6 +12,7 @@ export class FileTreeModal extends Modal {
     selectedFiles: FileSelection = new Set();
     fileExplicitActions: Map<string, ExplicitAction> = new Map();
     dropdownContainer: HTMLDivElement;
+    statusIndicator: HTMLSpanElement;
 
     constructor(
         app: App,
@@ -38,6 +40,12 @@ export class FileTreeModal extends Modal {
             cls: "smart-sync-header-btn",
         });
         selectToggleBtn.addEventListener("click", () => this.toggleSelectAll(selectToggleBtn));
+
+        // Status indicator in the center
+        this.statusIndicator = header.createSpan({
+            cls: "smart-sync-status-indicator",
+        });
+        this.updateStatusIndicator();
 
         const reloadBtn = header.createEl("button", {
             text: "🔄 Reload",
@@ -146,6 +154,13 @@ export class FileTreeModal extends Modal {
     private updateSyncButton() {
         const count = this.selectedFiles.size;
         this.syncButton.textContent = `🔄 Sync (${count})`;
+    }
+
+    updateStatusIndicator() {
+        const status = this.plugin.status;
+        const statusItem = STATUS_ITEMS[status];
+        this.statusIndicator.textContent = `${statusItem.emoji} ${statusItem.label}`;
+        this.statusIndicator.setCssProps({ color: statusItem.color });
     }
 
     private getAllFilePaths(): string[] {
@@ -283,7 +298,7 @@ export class FileTreeModal extends Modal {
         if (!hasAnyChanges) {
             this.fileTreeDiv.createDiv({
                 cls: "smart-sync-empty",
-                text: "✓ No changes to sync!",
+                text: "✓ No changes to sync",
             });
             return;
         }
@@ -517,7 +532,7 @@ export class FileTreeModal extends Modal {
     }
 
     private showDiff(path: string) {
-        new Notice(`Showing diff for ${path}`);
+        new DiffModal(this.app, this.plugin, path).open();
     }
 
     onClose() {

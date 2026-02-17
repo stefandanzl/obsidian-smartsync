@@ -20,7 +20,6 @@ import {
     Type,
 } from "./const";
 import { DailyNoteManager } from "./dailynote";
-import * as path from "path";
 
 export default class SmartSync extends Plugin {
     message: string | Array<string[]> | string[] | unknown[];
@@ -405,6 +404,10 @@ export default class SmartSync extends Plugin {
             this.iconSpan.setCssProps({ color: STATUS_ITEMS[status].color });
             this.statusBar.setAttribute("aria-label", STATUS_ITEMS[status].label);
             setIcon(this.iconSpan, STATUS_ITEMS[status].lucide);
+        }
+
+        if (this.modal) {
+            this.modal.updateStatusIndicator();
         }
     }
 
