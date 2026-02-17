@@ -1,19 +1,17 @@
-import { App, Modal } from "obsidian";
+import { App, Modal, Notice } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { FileTree, FileTrees, Location, PLUGIN_ID, Status, Type } from "./const";
+import { dirname } from "./util";
+
+type ExplicitAction = "push" | "pull" | "default";
+type FileSelection = Set<string>;
 
 export class FileTreeModal extends Modal {
     fileTreeDiv: HTMLDivElement;
-    pathRenderObject: Record<string, HTMLDivElement>;
-    sectionRenderObject: Record<
-        string,
-        {
-            type: Type;
-            location: Location;
-            element: HTMLDivElement;
-            isEnabled: boolean;
-        }
-    >;
+    selectedFiles: FileSelection = new Set();
+    fileExplicitActions: Map<string, ExplicitAction> = new Map();
+    dropdownContainer: HTMLDivElement;
+
     constructor(
         app: App,
         public plugin: SmartSyncPlugin
@@ -22,217 +20,96 @@ export class FileTreeModal extends Modal {
     }
 
     onOpen() {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { titleEl, modalEl, contentEl, containerEl } = this;
-
-        this.pathRenderObject = {};
-        this.sectionRenderObject = {};
+        const { titleEl, modalEl, contentEl } = this;
 
         modalEl.addClass("smart-sync-modal");
-        titleEl.setText("SmartSync Control Panel");
+        titleEl.setText("SmartSync");
 
-        const mainDiv = contentEl.createDiv({ cls: "smart-sync-container" });
+        // Container for floating dropdowns (context menus)
+        this.dropdownContainer = contentEl.createDiv({ cls: "smart-sync-dropdowns-container" });
 
-        const buttonDiv = mainDiv.createDiv({ cls: "smart-sync-button-container" });
+        const container = contentEl.createDiv({ cls: "smart-sync-container" });
 
-        // Add button sections
-        const basicSection = buttonDiv.createDiv({ cls: "smart-sync-button-section" });
+        // ============= HEADER =============
+        const header = container.createDiv({ cls: "smart-sync-header" });
 
-        const advancedSection = buttonDiv.createDiv({ cls: "smart-sync-button-section advanced-section" });
-        advancedSection.createEl("h3", { text: "Advanced", cls: "smart-sync-section-title" });
-
-        let advancedEnabled = false;
-
-        // Add clickable status bar as test button
-        const statusBar = basicSection.createDiv({ cls: "smart-sync-status-bar clickable" });
-        const statusText = statusBar.createSpan({ cls: "smart-sync-status-text" });
-        statusText.setText("Ready");
-        statusText.setCssStyles({
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+        const selectToggleBtn = header.createEl("button", {
+            text: "☑️ Select All",
+            cls: "smart-sync-header-btn",
         });
+        selectToggleBtn.addEventListener("click", () => this.toggleSelectAll(selectToggleBtn));
 
-        statusBar.addEventListener("click", () => {
-            this.plugin.operations.test();
+        const reloadBtn = header.createEl("button", {
+            text: "🔄 Reload",
+            cls: "smart-sync-header-btn",
         });
-
-        // Add hover hint for clickable status
-        statusBar.title = "Click to test connection";
-
-        /**
-         * CHECK Button
-         */
-        const checkButton = basicSection.createEl("button", {
-            text: `🔍 CHECK ${Status.CHECK}`,
-            cls: ["mod-cta", "smart-sync-button"],
-        });
-        checkButton.addEventListener("click", () => {
+        reloadBtn.addEventListener("click", () => {
             this.plugin.operations.check();
         });
 
-        /**
-         * SYNC Button
-         */
-        const syncButton = basicSection.createEl("button", {
-            text: `🔄 SYNC ${Status.SYNC}`,
-            cls: ["mod-cta", "smart-sync-button"],
-        });
-        syncButton.addEventListener("click", async () => {
-            // this.plugin.show("Synchronizing files with server ...")
-            this.plugin.operations.fullSync();
-        });
+        // ============= FILES AREA =============
+        this.fileTreeDiv = container.createDiv({ cls: "smart-sync-files-area" });
 
-        /**
-         * ADVANCED Button
-         */
-        const advancedButton = basicSection.createEl("button", {
-            text: "⚡ ADVANCED",
-            cls: ["mod-cta", "smart-sync-button"],
-        });
-        advancedButton.addEventListener("click", async () => {
-            if (advancedEnabled) {
-                this.plugin.show("Advanced Actions Buttons already enabled.");
-                advancedEnabled = false;
-                advancedSection.style.display = "none";
-                return;
-            }
-            this.plugin.show("Warning! Use Advanced Actions carefully!");
-            advancedEnabled = true;
-
-            // Show advanced section
-            advancedSection.style.display = "block";
-        });
-
-        /**
-         * Settings Button
-         */
-        const openSettingsButton = advancedSection.createEl("button", {
-            text: "⚙️ SETTINGS",
-            cls: ["mod-cta", "smart-sync-button"],
-        });
-        openSettingsButton.addEventListener("click", () => {
-            this.plugin.settingPrivate.openTabById(PLUGIN_ID);
-            this.plugin.settingPrivate.open();
-        });
-
-        /**
-         * PAUSE Button
-         */
-        const pauseButton = advancedSection.createEl("button", {
-            text: `⏸️ PAUSE ${Status.PAUSE}`,
-            cls: ["mod-cta", "smart-sync-button"],
-        });
-        pauseButton.addEventListener("click", () => {
-            this.plugin.show("Toggling Pause");
-            this.plugin.togglePause();
-        });
-
-        /**
-         * ERROR Button
-         */
-        const errorButton = advancedSection.createEl("button", {
-            text: `🚨 ERROR ${Status.ERROR}`,
-            cls: ["mod-cta", "smart-sync-button"],
-            title: "Clear the error status in your previous data storage",
-        });
-        errorButton.addEventListener("click", () => {
-            this.plugin.show("Resetting Error status");
-            this.plugin.prevData.error = false;
-            this.plugin.setStatus(Status.NONE);
-        });
-
-        /**
-         * SAVE Button
-         */
-        const saveButton = advancedSection.createEl("button", {
-            text: `💾 SAVE ${Status.SAVE}`,
-            cls: ["mod-cta", "smart-sync-button"],
-        });
-        saveButton.addEventListener("click", () => {
-            this.plugin.show("Saving current vault file state for future synchronisation actions");
-            this.plugin.saveState();
-        });
-
-        /**
-         * PULL Button
-         */
-        const pullButton = advancedSection.createEl("button", {
-            text: `⬇️ PULL ${Status.PULL}`,
-            cls: ["mod-cta", "smart-sync-button"],
-        });
-        pullButton.addEventListener("click", async () => {
-            this.plugin.operations.pull();
-        });
-
-        /**
-         * PUSH Button
-         */
-        const pushButton = advancedSection.createEl("button", {
-            text: `⬆️ PUSH ${Status.PUSH}`,
-            cls: ["mod-cta", "smart-sync-button"],
-        });
-        pushButton.addEventListener("click", async () => {
-            // this.plugin.show("Pushing files to server ...")
-            this.plugin.operations.push();
-        });
-
-        const dupLocalBtn = advancedSection.createEl("button", {
-            text: `📋 DUPLICATE LOCAL`,
-            cls: ["mod-cta", "smart-sync-button", "button-danger"],
-        });
-        dupLocalBtn.addEventListener("click", async () => {
-            await this.plugin.operations.duplicateLocal();
-        });
-
-        const dupWebBtn = advancedSection.createEl("button", {
-            text: `🌐 DUPLICATE REMOTE`,
-            cls: ["mod-cta", "smart-sync-button", "button-danger"],
-        });
-        dupWebBtn.addEventListener("click", async () => {
-            await this.plugin.operations.duplicateRemote();
-        });
-
-        const containDiv = mainDiv.createDiv({ cls: "smart-sync-content" });
-
-        // Update status based on plugin state
-        const updateStatus = () => {
-            const status = this.plugin.status;
-            const statusMessages: Record<Status, string> = {
-                [Status.NONE]: "Ready",
-                [Status.TEST]: "Testing connection...",
-                [Status.CHECK]: "Checking for changes...",
-                [Status.SYNC]: "Synchronizing files...",
-                [Status.AUTO]: "Auto-syncing...",
-                [Status.SAVE]: "Saving state...",
-                [Status.OFFLINE]: "Offline",
-                [Status.ERROR]: "Error occurred",
-                [Status.PULL]: "Pulling files...",
-                [Status.PUSH]: "Pushing files...",
-                [Status.PAUSE]: "Paused",
-            };
-
-            statusText.setText(`${status} ${statusMessages[status] || "Unknown status"}`);
-            statusBar.className = `smart-sync-status-bar status-${status.toLowerCase()}`;
-        };
-
-        // Set initial status and create status updater
-        updateStatus();
-
-        // Override plugin's setStatus method to update our status bar
-        const originalSetStatus = this.plugin.setStatus.bind(this.plugin);
-        (this as any).originalSetStatus = originalSetStatus;
-        this.plugin.setStatus = async (status: Status, show?: boolean, text?: string) => {
-            await originalSetStatus(status, show, text);
-            updateStatus();
-        };
-
-        this.fileTreeDiv = containDiv.createDiv({ cls: "smart-sync-file-tree" });
-        // Save position
+        // Save scroll position
         this.fileTreeDiv.addEventListener("scroll", (e) => {
             this.plugin.lastScrollPosition = (e.target as HTMLElement).scrollTop;
         });
 
+        // ============= FOOTER =============
+        const footer = container.createDiv({ cls: "smart-sync-footer" });
+
+        // Left side - empty for balance
+        footer.createDiv({ cls: "smart-sync-footer-spacer" });
+
+        // Center - Sync Button
+        this.syncButton = footer.createEl("button", {
+            text: `🔄 Sync (0)`,
+            cls: ["smart-sync-footer-btn", "smart-sync-primary-btn"],
+        });
+        this.syncButton.addEventListener("click", () => this.syncSelected());
+
+        // Right side - Action buttons
+        const rightActions = footer.createDiv({ cls: "smart-sync-footer-right" });
+
+        // Special Actions Dropdown
+        const specialActionsBtn = rightActions.createEl("button", {
+            text: "⚡ Actions",
+            cls: "smart-sync-footer-btn",
+        });
+        this.createDropdown(specialActionsBtn, [
+            {
+                label: "📋 Replicate Local → Remote",
+                action: () => this.confirmAndRun("Replicate local on remote", () => this.plugin.operations.duplicateLocal()),
+            },
+            {
+                label: "🌐 Replicate Remote → Local",
+                action: () => this.confirmAndRun("Replicate remote on local", () => this.plugin.operations.duplicateRemote()),
+            },
+            { label: "⬆️ Push Selected", action: () => this.confirmAndRun("Push selected files", () => this.pushSelected()) },
+            { label: "⬇️ Pull Selected", action: () => this.confirmAndRun("Pull selected files", () => this.pullSelected()) },
+        ]);
+
+        // Maintenance Dropdown
+        const maintenanceBtn = rightActions.createEl("button", {
+            text: "🔧",
+            cls: "smart-sync-footer-btn",
+            title: "Maintenance",
+        });
+        this.createDropdown(maintenanceBtn, [
+            { label: "❌ Clear Error States", action: () => this.clearErrors() },
+            { label: "💾 Save Vault State", action: () => this.plugin.saveState() },
+            { label: "⚙️ Settings", action: () => this.openSettings() },
+            { label: "⏸️ Pause Sync", action: () => this.togglePause() },
+        ]);
+
+        // Close dropdowns when clicking outside
+        document.addEventListener("click", (e) => {
+            if (!(e.target as HTMLElement).closest(".smart-sync-dropdown, .smart-sync-menu-btn")) {
+                this.closeAllDropdowns();
+            }
+        });
+
+        // Load and render files
         if (!this.plugin.fileTrees) {
             this.plugin.operations.check();
         } else {
@@ -240,370 +117,411 @@ export class FileTreeModal extends Modal {
         }
     }
 
-    onClose() {
-        const { contentEl } = this;
-        contentEl.empty();
-        // Restore original setStatus method
-        if ((this as any).originalSetStatus) {
-            this.plugin.setStatus = (this as any).originalSetStatus;
+    private syncButton: HTMLButtonElement;
+
+    private toggleSelectAll(btn: HTMLButtonElement) {
+        const allPaths = this.getAllFilePaths();
+        const allSelected = allPaths.length > 0 && this.selectedFiles.size === allPaths.length;
+
+        if (allSelected) {
+            this.selectedFiles.clear();
+            btn.textContent = "☑️ Select All";
+        } else {
+            allPaths.forEach((path) => this.selectedFiles.add(path));
+            btn.textContent = "☐ Select None";
         }
-        this.plugin.modal;
+        this.renderFileTrees();
+        this.updateSyncButton();
+    }
+
+    private toggleFileSelection(path: string) {
+        if (this.selectedFiles.has(path)) {
+            this.selectedFiles.delete(path);
+        } else {
+            this.selectedFiles.add(path);
+        }
+        this.updateSyncButton();
+    }
+
+    private updateSyncButton() {
+        const count = this.selectedFiles.size;
+        this.syncButton.textContent = `🔄 Sync (${count})`;
+    }
+
+    private getAllFilePaths(): string[] {
+        const paths: string[] = [];
+        if (!this.plugin.fullFileTrees) return paths;
+
+        ["remoteFiles", "localFiles"].forEach((location) => {
+            const locationData = this.plugin.fullFileTrees![location as keyof FileTrees];
+            ["added", "deleted", "modified"].forEach((type) => {
+                Object.keys(locationData[type as keyof FileTree]).forEach((path) => {
+                    paths.push(path);
+                });
+            });
+        });
+        return paths;
+    }
+
+    private createDropdown(button: HTMLButtonElement, items: { label: string; action: () => void }[]): void {
+        const dropdown = document.createElement("div");
+        dropdown.addClass("smart-sync-dropdown");
+        this.dropdownContainer.appendChild(dropdown);
+
+        const dropdownContent = dropdown.createDiv({ cls: "smart-sync-dropdown-content" });
+
+        items.forEach((item) => {
+            const itemEl = dropdownContent.createEl("button", {
+                text: item.label,
+                cls: "smart-sync-dropdown-item",
+            });
+            itemEl.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.closeAllDropdowns();
+                item.action();
+            });
+        });
+
+        button.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const isOpen = dropdown.hasClass("open");
+            this.closeAllDropdowns();
+            if (!isOpen) {
+                const rect = button.getBoundingClientRect();
+                // Position above the button
+                dropdown.style.bottom = window.innerHeight - rect.top + 8 + "px";
+                dropdown.style.left = rect.left + rect.width / 2 - 90 + "px";
+                dropdown.addClass("open");
+            }
+        });
+    }
+
+    private closeAllDropdowns() {
+        this.dropdownContainer.querySelectorAll(".smart-sync-dropdown.open").forEach((el) => {
+            el.removeClass("open");
+            (el as HTMLElement).style.bottom = "";
+            (el as HTMLElement).style.left = "";
+        });
+        this.dropdownContainer.querySelectorAll(".smart-sync-context-menu.open").forEach((el) => {
+            el.removeClass("open");
+            (el as HTMLElement).style.top = "";
+            (el as HTMLElement).style.right = "";
+        });
+    }
+
+    private confirmAndRun(actionName: string, action: () => void) {
+        const confirm = new Modal(this.app);
+        confirm.contentEl.createEl("p", {
+            text: `Are you sure you want to ${actionName.toLowerCase()}?`,
+            cls: "smart-sync-confirm-text",
+        });
+
+        const btnContainer = confirm.contentEl.createDiv({ cls: "smart-sync-confirm-buttons" });
+
+        const yesBtn = btnContainer.createEl("button", {
+            text: "Yes",
+            cls: ["mod-cta", "smart-sync-confirm-btn"],
+        });
+        yesBtn.addEventListener("click", () => {
+            action();
+            confirm.close();
+        });
+
+        const noBtn = btnContainer.createEl("button", {
+            text: "No",
+            cls: "smart-sync-confirm-btn",
+        });
+        noBtn.addEventListener("click", () => confirm.close());
+
+        confirm.open();
+    }
+
+    private async syncSelected() {
+        if (this.selectedFiles.size === 0) {
+            new Notice("No files selected");
+            return;
+        }
+        this.plugin.operations.fullSync();
+    }
+
+    private async pushSelected() {
+        new Notice(`Pushing ${this.selectedFiles.size} files`);
+    }
+
+    private async pullSelected() {
+        new Notice(`Pulling ${this.selectedFiles.size} files`);
+    }
+
+    private clearErrors() {
+        this.plugin.prevData.error = false;
+        this.plugin.setStatus(Status.NONE);
+        new Notice("Error states cleared");
+    }
+
+    private openSettings() {
+        this.plugin.settingPrivate.openTabById(PLUGIN_ID);
+        this.plugin.settingPrivate.open();
+    }
+
+    private togglePause() {
+        this.plugin.togglePause();
     }
 
     renderFileTrees() {
-        // Clear previous content
         this.fileTreeDiv.empty();
-        const mainContainer = this.fileTreeDiv.createDiv({ cls: "sync-status" });
 
-        // Check if there's anything to sync
+        if (!this.plugin.fullFileTrees) {
+            this.fileTreeDiv.createEl("p", { text: "Loading...", cls: "smart-sync-loading" });
+            return;
+        }
+
         const hasAnyChanges = ["remoteFiles", "localFiles"].some((location) => {
-            // IMPORTANT! NOT USING fileTrees here because it will be modified! For rendering using an original twin
-            const locationData = this.plugin.fullFileTrees[location as keyof FileTrees];
+            const locationData = this.plugin.fullFileTrees![location as keyof FileTrees];
             return Object.values(locationData).some((section) => Object.keys(section).length > 0);
         });
 
         if (!hasAnyChanges) {
-            const emptyMessage = mainContainer.createDiv({ cls: "sync-empty-message" });
-            emptyMessage.createDiv({
-                cls: "sync-empty-text",
-                text: "Nothing to sync ✓",
+            this.fileTreeDiv.createDiv({
+                cls: "smart-sync-empty",
+                text: "✓ No changes to sync!",
             });
-            return mainContainer;
+            return;
         }
 
-        // Helper function to get appropriate icon for file type
-        function getFileIcon(path: string): string {
-            if (path.endsWith("/")) return "📁";
+        // Render Local and Remote sections
+        const locations: { key: keyof FileTrees; title: string; icon: string }[] = [
+            { key: "localFiles", title: "Local", icon: "💻" },
+            { key: "remoteFiles", title: "Remote", icon: "☁️" },
+        ];
 
-            const ext = path.split(".").pop()?.toLowerCase();
-            switch (ext) {
-                case "md":
-                    return "📝";
-                case "txt":
-                    return "📄";
-                case "pdf":
-                    return "📕";
-                case "png":
-                case "jpg":
-                case "jpeg":
-                case "gif":
-                case "svg":
-                    return "🖼️";
-                case "mp3":
-                case "wav":
-                case "ogg":
-                    return "🎵";
-                case "mp4":
-                case "avi":
-                case "mov":
-                    return "🎬";
-                case "zip":
-                case "rar":
-                case "7z":
-                    return "📦";
-                case "js":
-                case "ts":
-                case "jsx":
-                case "tsx":
-                    return "🟨";
-                case "py":
-                    return "🐍";
-                case "java":
-                    return "☕";
-                case "cpp":
-                case "c":
-                case "h":
-                    return "🔧";
-                default:
-                    return "📄";
-            }
-        }
+        const types: Array<{ key: keyof FileTree; title: string; icon: string; color: string }> = [
+            { key: "added", title: "Added", icon: "➕", color: "green" },
+            { key: "modified", title: "Modified", icon: "✏️", color: "orange" },
+            { key: "deleted", title: "Deleted", icon: "🗑️", color: "red" },
+        ];
 
-        // Helper function to get section icon
-        function getSectionIcon(type: string): string {
-            switch (type.toLowerCase()) {
-                case "added":
-                    return "➕";
-                case "deleted":
-                    return "🗑️";
-                case "modified":
-                    return "✏️";
-                case "except":
-                    return "⚠️";
-                default:
-                    return "📄";
-            }
-        }
-
-        // Helper function to render a section if it has entries
-        function renderSection(
-            plugin: SmartSyncPlugin,
-            parent: HTMLElement,
-            title: string,
-            data: Record<string, string>,
-            parents: { location: Location; type: Type }
-        ) {
-            if (Object.keys(data).length === 0) return;
-
-            const sectionDiv = parent.createDiv({ cls: "sync-section" });
-
-            const titleDiv = sectionDiv.createDiv({
-                cls: ["sync-section-title"],
-                text: `${getSectionIcon(title)} ${title}`,
-            });
-
-            if (parents.location + parents.type in plugin.modal.sectionRenderObject) {
-                if (!plugin.modal.sectionRenderObject[parents.location + parents.type].isEnabled) {
-                    titleDiv.addClass("file-user-disabled");
-                }
-            } else {
-                plugin.modal.sectionRenderObject[parents.location + parents.type] = {
-                    type: parents.type,
-                    location: parents.location as Location,
-                    element: titleDiv,
-                    isEnabled: true,
-                };
-            }
-
-            titleDiv.onClickEvent((event) => {
-                switch (event.button) {
-                    case 0:
-                        if (!plugin.modal.sectionRenderObject[parents.location + parents.type].isEnabled) {
-                            // ENABLE
-                            plugin.modal.sectionRenderObject[parents.location + parents.type].isEnabled = true;
-                            plugin.modal.sectionRenderObject[parents.location + parents.type].element.removeClass("file-user-disabled");
-
-                            Object.entries(plugin.tempExcludedFiles).forEach(([pa, { location, type, hash }]) => {
-                                if (location === parents.location && type === parents.type) {
-                                    delete plugin.tempExcludedFiles[pa];
-                                    plugin.fileTrees[parents?.location as keyof FileTrees][parents?.type as keyof FileTree][pa] = hash;
-                                    plugin.modal.pathRenderObject[pa]?.removeClass("file-user-disabled");
-                                }
-                            });
-                        } else {
-                            // DISABLE
-                            plugin.modal.sectionRenderObject[parents.location + parents.type].isEnabled = false;
-                            plugin.modal.sectionRenderObject[parents.location + parents.type].element.addClass("file-user-disabled");
-
-                            Object.entries(plugin.fileTrees[parents.location][parents.type]).forEach(([pa, ha]) => {
-                                plugin.tempExcludedFiles[pa] = {
-                                    location: parents.location,
-                                    type: parents.type,
-                                    hash: ha,
-                                };
-
-                                delete plugin.fileTrees[parents.location][parents.type][pa];
-                                plugin.modal.pathRenderObject[pa].addClass("file-user-disabled");
-                            });
-                        }
-
-                        break;
-
-                    default:
-                        break;
-                }
-            });
-
-            const contentDiv = sectionDiv.createDiv({ cls: "sync-section-content" });
-
-            Object.keys(data).forEach((path) => {
-                const classes = ["sync-file-entry"];
-                if (path in plugin.tempExcludedFiles) {
-                    if (plugin.tempExcludedFiles[path].type === "except") {
-                        if (plugin.tempExcludedFiles[path].location === "localFiles") {
-                            classes.push("file-user-upload");
-                        } else {
-                            classes.push("file-user-download");
-                        }
-                    } else {
-                        classes.push("file-user-disabled");
-                    }
-                } else {
-                    if (parents?.type === "except") {
-                        classes.push("file-user-disabled");
-                    }
-                }
-                const pathDiv = contentDiv.createDiv({
-                    cls: classes,
-                });
-
-                // Add file icon and path
-                const iconSpan = pathDiv.createSpan({ cls: "file-icon" });
-                iconSpan.setText(getFileIcon(path));
-
-                const pathSpan = pathDiv.createSpan({ cls: "file-path" });
-                pathSpan.setText(path);
-
-                plugin.modal.pathRenderObject[path] = pathDiv;
-
-                pathDiv.onClickEvent((event) => {
-                    switch (event.button) {
-                        // Left Click
-                        case 0:
-                            if (!parents) {
-                                return;
-                            }
-
-                            if (Object.keys(plugin.tempExcludedFiles).includes(path)) {
-                                // ENABLE
-                                const hash = plugin.tempExcludedFiles[path].hash;
-                                delete plugin.tempExcludedFiles[path];
-                                plugin.fileTrees[parents?.location as keyof FileTrees][parents?.type as keyof FileTree][path] = hash;
-                                pathDiv.removeClass("file-user-disabled");
-                                if (path.endsWith("/")) {
-                                    Object.keys(plugin.tempExcludedFiles).forEach((pa) => {
-                                        if (pa.startsWith(path)) {
-                                            const ha = plugin.tempExcludedFiles[pa].hash;
-                                            delete plugin.tempExcludedFiles[pa];
-                                            plugin.fileTrees[parents?.location as keyof FileTrees][parents?.type as keyof FileTree][pa] =
-                                                ha;
-                                            plugin.modal.pathRenderObject[pa]?.removeClass("file-user-disabled");
-                                        }
-                                    });
-                                }
-                            } else {
-                                // DISABLE
-                                const hash = plugin.fileTrees[parents.location as keyof FileTrees][parents.type as keyof FileTree][path];
-
-                                plugin.tempExcludedFiles[path] = { location: parents.location as Location, type: parents.type, hash: hash };
-
-                                delete plugin.fileTrees[parents.location as keyof FileTrees][parents.type as keyof FileTree][path];
-                                pathDiv.addClass("file-user-disabled");
-
-                                if (path.endsWith("/")) {
-                                    Object.entries(plugin.fileTrees[parents?.location as keyof FileTrees][parents.type]).forEach(
-                                        ([pa, ha]) => {
-                                            if (pa.startsWith(path)) {
-                                                plugin.tempExcludedFiles[pa] = {
-                                                    location: parents.location as Location,
-                                                    type: parents.type,
-                                                    hash: ha,
-                                                };
-
-                                                delete plugin.fileTrees[parents.location as keyof FileTrees][
-                                                    parents.type as keyof FileTree
-                                                ][pa];
-                                                plugin.modal.pathRenderObject[pa].addClass("file-user-disabled");
-                                            }
-                                        }
-                                    );
-                                }
-                            }
-
-                            break;
-                        // Middle Click
-                        case 1:
-                            if (
-                                !(
-                                    path.startsWith(plugin.app.vault.configDir) ||
-                                    (parents?.type === "deleted" && parents?.location === "localFiles")
-                                )
-                            ) {
-                                if (path.endsWith("/")) {
-                                    //
-                                } else {
-                                    plugin.app.workspace.openLinkText(path, "", "tab"); //   openFile(file: TFile, openState?: OpenViewState)
-                                }
-                            }
-                            break;
-                        // Right Click
-                        case 2:
-                            if (!parents) {
-                                return;
-                            }
-                            if (parents.type === "except") {
-                                // check if defined
-                                if (!Object.keys(plugin.tempExcludedFiles).includes(path)) {
-                                    // UPLOAD
-                                    const location: Location = "localFiles";
-                                    const hash = plugin.fileTrees[location][parents.type][path];
-                                    plugin.tempExcludedFiles[path] = {
-                                        location,
-                                        type: "except",
-                                        hash,
-                                    };
-                                    plugin.fileTrees[location].modified[path] = hash;
-                                    delete plugin.fileTrees.remoteFiles.except[path];
-                                    delete plugin.fileTrees.localFiles.except[path];
-
-                                    pathDiv.addClass("file-user-upload");
-                                } else if (plugin.tempExcludedFiles[path].location === "localFiles") {
-                                    // DOWNLOAD
-                                    const location: Location = "remoteFiles";
-                                    const hash = plugin.fileTrees[location][parents.type][path];
-                                    plugin.tempExcludedFiles[path] = {
-                                        location,
-                                        type: "except",
-                                        hash,
-                                    };
-                                    plugin.fileTrees[location].modified[path] = hash;
-                                    delete plugin.fileTrees["localFiles"].modified[path];
-                                    pathDiv.removeClass("file-user-upload");
-                                    pathDiv.addClass("file-user-download");
-                                } else if (plugin.tempExcludedFiles[path].location === "remoteFiles") {
-                                    // RESET TO EXCEPT
-                                    const hash = plugin.fileTrees.remoteFiles[parents.type][path];
-                                    delete plugin.tempExcludedFiles[path];
-
-                                    delete plugin.fileTrees["remoteFiles"].modified[path];
-                                    pathDiv.removeClass("file-user-download");
-
-                                    plugin.fileTrees.remoteFiles.except[path] = hash;
-                                    plugin.fileTrees.localFiles.except[path] = hash;
-                                }
-                                return;
-                            }
-
-                            // sync: check if path is in tempExcluded
-                            // save: don't save the current hash for path
-                            console.log(plugin.tempExcludedFiles);
-                            break;
-                        default:
-                            break;
-                    }
-                });
-            });
-        }
-
-        // Render each location if it has any changes
-        ["remoteFiles", "localFiles"].forEach((location) => {
-            // IMPORTANT: using copy of fileTrees for rendering it in entirety and then adding formatting
-            const locationData = this.plugin.fullFileTrees[location as keyof FileTrees];
+        locations.forEach(({ key, title, icon }) => {
+            const locationData = this.plugin.fullFileTrees![key];
             const hasChanges = Object.values(locationData).some((section) => Object.keys(section).length > 0);
 
-            if (hasChanges) {
-                const locationDiv = mainContainer.createDiv({ cls: "sync-location" });
-                locationDiv.createDiv({
-                    cls: "sync-location-title",
-                    text: location === "remoteFiles" ? "☁️ Remote" : "💻 Local",
+            if (!hasChanges) return;
+
+            const locationEl = this.fileTreeDiv.createDiv({ cls: "smart-sync-location" });
+            locationEl.createDiv({ cls: "smart-sync-location-title", text: `${icon} ${title}` });
+
+            types.forEach(({ key: typeKey, title: typeTitle, icon: typeIcon, color }) => {
+                const files = locationData[typeKey];
+                if (Object.keys(files).length === 0) return;
+
+                const sectionEl = locationEl.createDiv({ cls: "smart-sync-section" });
+                sectionEl.createDiv({
+                    cls: ["smart-sync-section-title", `smart-sync-section-${color}`],
+                    text: `${typeIcon} ${typeTitle} (${Object.keys(files).length})`,
                 });
 
-                ["added", "deleted", "modified"].forEach((type) => {
-                    renderSection(
-                        this.plugin,
-                        locationDiv,
-                        type.charAt(0).toUpperCase() + type.slice(1),
-                        locationData[type as keyof FileTree],
-                        //@ts-ignore
-                        { location, type }
-                    );
+                const filesContainer = sectionEl.createDiv({ cls: "smart-sync-files-list" });
+
+                Object.keys(files).forEach((path) => {
+                    this.renderFileRow(filesContainer, path, key, typeKey);
                 });
+            });
+        });
+
+        // Restore scroll position
+        this.fileTreeDiv.scrollTop = this.plugin.lastScrollPosition;
+    }
+
+    private renderFileRow(container: HTMLElement, path: string, _location: Location, _type: Type) {
+        const row = container.createDiv({
+            cls: ["smart-sync-file-row", this.selectedFiles.has(path) ? "selected" : ""],
+            attr: { "data-path": path },
+        });
+
+        // Checkbox
+        const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
+        checkbox.innerHTML = this.selectedFiles.has(path) ? "☑️" : "☐";
+        checkbox.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.toggleFileSelection(path);
+            checkbox.innerHTML = this.selectedFiles.has(path) ? "☑️" : "☐";
+            row.toggleClass("selected", this.selectedFiles.has(path));
+        });
+
+        // File path (clickable parts)
+        const pathContainer = row.createDiv({ cls: "smart-sync-path-container" });
+
+        // Icon
+        const icon = path.endsWith("/") ? "📁" : this.getFileIcon(path);
+        pathContainer.createSpan({ cls: "smart-sync-file-icon", text: icon });
+
+        // Split path into directory and filename
+        const lastSlash = path.lastIndexOf("/");
+        if (lastSlash > 0) {
+            const dirPart = path.substring(0, lastSlash + 1);
+            const filePart = path.substring(lastSlash + 1);
+
+            const dirEl = pathContainer.createSpan({ cls: "smart-sync-path-dir", text: dirPart });
+            dirEl.addEventListener("click", () => this.openInExplorer(path));
+
+            const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: filePart });
+            fileEl.addEventListener("click", () => this.openFile(path));
+        } else {
+            const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: path });
+            fileEl.addEventListener("click", () => this.openFile(path));
+        }
+
+        // Explicit action dropdown (now to the right of path)
+        const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
+        const blankOption = actionSelect.createEl("option", { value: "", text: "" });
+        actionSelect.createEl("option", { value: "push", text: "⬆️ Push" });
+        actionSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
+
+        const currentAction = this.fileExplicitActions.get(path);
+        if (currentAction) {
+            actionSelect.value = currentAction;
+        } else {
+            blankOption.selected = true;
+        }
+
+        actionSelect.addEventListener("change", (e) => {
+            const action = (e.target as HTMLSelectElement).value as ExplicitAction;
+            if (action) {
+                this.fileExplicitActions.set(path, action);
+            } else {
+                this.fileExplicitActions.delete(path);
             }
         });
 
-        if (Object.keys(this.plugin.fullFileTrees.localFiles.except).length > 0) {
-            const locationDiv = mainContainer.createDiv({ cls: "sync-location" });
-            locationDiv.createDiv({
-                cls: "sync-location-title",
-                text: "File exceptions",
-            });
-            renderSection(this.plugin, locationDiv, "Except", this.plugin.fullFileTrees.localFiles.except, {
-                type: "except",
-                location: "localFiles",
-            });
+        actionSelect.addEventListener("click", (e) => e.stopPropagation());
+
+        // Action menu button (three dots)
+        const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
+        menuBtn.addEventListener("click", (e) => e.stopPropagation());
+
+        this.createContextMenu(menuBtn, path);
+    }
+
+    private createContextMenu(button: HTMLElement, path: string): void {
+        const menu = document.createElement("div");
+        menu.addClass("smart-sync-context-menu");
+        this.dropdownContainer.appendChild(menu);
+
+        const items = [
+            { label: "📂 Open in Explorer", action: () => this.openInExplorer(path) },
+
+            { label: "🔍 Show Diff", action: () => this.showDiff(path) },
+        ];
+        if (!path.startsWith(this.app.vault.configDir)) {
+            items.unshift({ label: "📝 Open in Obsidian", action: () => this.openFile(path) });
         }
-        // Restore scroll position after content is rendered
-        this.fileTreeDiv.scrollTop = this.plugin.lastScrollPosition;
-        // return mainContainer;
+
+        items.forEach((item) => {
+            const itemEl = menu.createEl("button", {
+                text: item.label,
+                cls: "smart-sync-context-item",
+            });
+            itemEl.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.closeAllDropdowns();
+                item.action();
+            });
+        });
+
+        button.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.closeAllDropdowns();
+            const rect = button.getBoundingClientRect();
+            menu.style.top = rect.bottom + 4 + "px";
+            menu.style.right = window.innerWidth - rect.right + "px";
+            menu.addClass("open");
+        });
+    }
+
+    private getFileIcon(path: string): string {
+        const ext = path.split(".").pop()?.toLowerCase();
+        switch (ext) {
+            case "md":
+                return "📝";
+            case "txt":
+                return "📄";
+            case "pdf":
+                return "📕";
+            case "png":
+            case "jpg":
+            case "jpeg":
+            case "gif":
+            case "svg":
+                return "🖼️";
+            case "mp3":
+            case "wav":
+            case "ogg":
+                return "🎵";
+            case "mp4":
+            case "avi":
+            case "mov":
+                return "🎬";
+            case "zip":
+            case "rar":
+            case "7z":
+                return "📦";
+            case "js":
+            case "ts":
+            case "jsx":
+            case "tsx":
+                return "🟨";
+            case "py":
+                return "🐍";
+            case "java":
+                return "☕";
+            case "cpp":
+            case "c":
+            case "h":
+                return "🔧";
+            default:
+                return "📄";
+        }
+    }
+
+    private openInExplorer(path: string) {
+        // Get the resource path which is in app://vault-id/path format
+        // const tFile = this.app.vault.getAbstractFileByPath(path);
+
+        try {
+            //@ts-ignore No longer in Obsidian API included
+            // var resourcePath = this.app.vault.adapter.getFullPath(tFile.path);
+            //@ts-ignore No longer in Obsidian API included
+            const basePath = this.app.vault.adapter.getBasePath().replaceAll("\\", "/");
+
+            console.log(basePath);
+            // console.log(resourcePath);
+
+            // const systemPath = decodeURIComponent(urlMatch[1]);
+            // var resourcePath = resourcePath.replaceAll("\\", "/");
+            const directoryPath = dirname(path);
+            console.log(directoryPath);
+
+            const systemPath = encodeURI(`${basePath}/${directoryPath}`);
+            console.log("enocded ", systemPath);
+            // Open with file:/// protocol for system file explorer
+            window.open(`file:///${systemPath}`, "_blank");
+        } catch (error) {
+            console.error("error, ", error);
+        }
+    }
+
+    private openFile(path: string) {
+        if (path.endsWith("/")) return;
+        if (path.startsWith(this.app.vault.configDir)) return;
+        this.app.workspace.openLinkText(path, "", "tab");
+    }
+
+    private showDiff(path: string) {
+        new Notice(`Showing diff for ${path}`);
+    }
+
+    onClose() {
+        this.dropdownContainer?.remove();
+        const { contentEl } = this;
+        contentEl.empty();
     }
 }

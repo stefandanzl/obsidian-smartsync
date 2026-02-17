@@ -1,450 +1,519 @@
-/* Modal and main layout */
-.smart-sync-modal {
-    overflow: hidden;
-    width: 80vw;
-    max-width: 1200px;
-    min-width: 600px;
-    height: 80vh;
-    background: var(--background-primary);
-}
+/* SmartSync Modal - Redesigned Layout */
 
-.modal-content {
-overflow-y: auto;
+/* Modal Container */
+.smart-sync-modal {
+    width: 90vw;
+    max-width: 1400px;
+    height: 85vh;
+    max-height: 900px;
+    background: var(--background-primary);
 }
 
 .smart-sync-container {
-    position: relative;
     display: flex;
-    flex-direction: row-reverse;
-    gap: 12px;
-    margin: 0;
-    padding: 20px;
+    flex-direction: column;
     height: 100%;
-    max-height: calc(80vh - 40px);
     overflow: hidden;
 }
 
-.smart-sync-button-container {
-    position: absolute;
-    right: 20px;
-    top: 20px;
-    bottom: 20px;
-    width: 180px;
+/* Dropdown Container (for floating menus) */
+.smart-sync-dropdowns-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.smart-sync-dropdowns-container > * {
+    pointer-events: auto;
+}
+
+/* ============= HEADER ============= */
+.smart-sync-header {
     display: flex;
-    flex-direction: column;
     gap: 12px;
-    flex-shrink: 0;
-    padding: 6px;
+    padding: 16px 20px;
     background: var(--background-secondary);
-    border-radius: 12px;
-    border: 1px solid var(--background-modifier-border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid var(--background-modifier-border);
+    flex-shrink: 0;
 }
 
-.smart-sync-content {
-    flex: 1;
-    margin-right: 220px;
-    overflow: hidden;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    min-width: 0;
-    max-height: 100%;
+.smart-sync-header-btn {
+    padding: 8px 16px;
+    background: var(--interactive-normal);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
- 
- .smart-sync-file-tree {
+
+.smart-sync-header-btn:hover {
+    background: var(--interactive-hover);
+    border-color: var(--interactive-hover);
+}
+
+/* ============= FILES AREA ============= */
+.smart-sync-files-area {
     flex: 1;
     overflow-y: auto;
-    user-select: text;
-    padding: 8px;
+    padding: 16px 20px;
     background: var(--background-primary);
-    border-radius: 12px;
-    border: 1px solid var(--background-modifier-border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    min-height: 0;
-    max-height: 100%;
-}
- 
- /* Sync status styling */
-.sync-status {
-    padding: 0;
-    font-size: var(--font-ui-medium);
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
 }
 
-.sync-location {
+.smart-sync-loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+    font-size: var(--font-ui-large);
+}
+
+.smart-sync-empty {
+    text-align: center;
+    padding: 60px 40px;
+    color: var(--text-success);
+    font-size: var(--font-ui-larger);
+    font-weight: var(--font-medium);
+}
+
+/* Location Sections */
+.smart-sync-location {
     margin-bottom: 24px;
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 12px;
     border: 1px solid var(--background-modifier-border);
     overflow: hidden;
 }
 
-.sync-location-title {
-    font-size: var(--font-ui-larger);
+.smart-sync-location-title {
+    padding: 14px 20px;
+    font-size: var(--font-ui-large);
     font-weight: var(--font-semibold);
-    padding: 12px 16px;
-    margin: 0;
-    background: var(--background-modifier-hover);
     color: var(--text-accent);
+    background: var(--background-modifier-hover);
     border-bottom: 1px solid var(--background-modifier-border);
-    display: flex;
-    align-items: center;
-    gap: 8px;
 }
 
-
-.sync-section {
-    margin-bottom: 0;
+/* Section (Added/Modified/Deleted) */
+.smart-sync-section {
     border-bottom: 1px solid var(--background-modifier-border-hover);
 }
 
-.sync-section:last-child {
+.smart-sync-section:last-child {
     border-bottom: none;
 }
 
-.sync-section-title {
+.smart-sync-section-title {
+    padding: 10px 20px;
+    font-size: var(--font-ui-medium);
     font-weight: var(--font-semibold);
-    padding: 10px 16px;
-    margin: 0;
-    color: var(--text-normal);
-    cursor: pointer;
+    background: var(--background-modifier-subtle);
+}
+
+.smart-sync-section-green {
+    color: var(--color-green);
+}
+.smart-sync-section-orange {
+    color: var(--color-orange);
+}
+.smart-sync-section-red {
+    color: var(--color-red);
+}
+
+/* File List */
+.smart-sync-files-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* File Row */
+.smart-sync-file-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    transition: background-color 0.2s ease;
-    font-size: var(--font-ui-medium);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--background-modifier-border-hover);
+    transition: background 0.15s ease;
 }
 
-.sync-section-title:hover {
+.smart-sync-file-row:hover {
     background: var(--background-modifier-hover);
 }
 
-
-.sync-section-content {
-    padding: 0 16px 8px 32px;
+.smart-sync-file-row.selected {
+    background: var(--background-modifier-active-hover);
 }
 
-.sync-file-entry {
-    padding: 4px 8px;
-    margin: 2px 0;
-    font-size: var(--font-ui-small);
+/* Checkbox */
+.smart-sync-checkbox {
     cursor: pointer;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-    line-height: 1.4;
-    white-space: nowrap;
+    font-size: 18px;
+    user-select: none;
+    min-width: 28px;
+    text-align: center;
+}
+
+/* Path Container */
+.smart-sync-path-container {
+    flex: 1;
     display: flex;
     align-items: center;
+    gap: 4px;
     min-width: 0;
-}
-
-.sync-file-entry:hover {
-    background: var(--background-modifier-hover);
-    transform: translateX(2px);
-}
-
-.file-icon {
-    margin-right: 8px;
-    font-size: var(--font-ui-small);
-    display: inline-block;
-    width: 20px;
-    min-width: 20px;
-    text-align: center;
-    flex-shrink: 0;
-}
-
-.file-path {
     font-family: var(--font-monospace);
-    flex: 1;
+    font-size: var(--font-ui-small);
+}
+
+.smart-sync-file-icon {
+    font-size: 16px;
+    min-width: 20px;
+}
+
+.smart-sync-path-dir {
+    color: var(--text-muted);
+    cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
- 
- /* Button styling */
-.smart-sync-button {
-    padding: 12px 16px;
-    margin: 0;
-    width: 100%;
-    border-radius: 8px;
-    font-weight: var(--font-medium);
-    font-size: var(--font-ui-small);
-    transition: all 0.2s ease;
-    border: 1px solid var(--interactive-normal);
-    text-align: left;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+.smart-sync-path-dir:hover {
+    color: var(--text-accent);
+    text-decoration: underline;
 }
 
-.smart-sync-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+.smart-sync-path-file {
+    color: var(--text-normal);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: var(--font-medium);
+}
+
+.smart-sync-path-file:hover {
+    color: var(--text-accent);
+}
+
+/* Action Dropdown (select) */
+.smart-sync-action-select {
+    padding: 4px 8px;
+    font-size: var(--font-ui-smaller);
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    color: var(--text-normal);
+    cursor: pointer;
+    min-width: 70px;
+    flex-shrink: 0;
+}
+
+/* Menu Button */
+.smart-sync-menu-btn {
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+    min-width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.smart-sync-menu-btn:hover {
+    opacity: 1;
+    background: var(--background-modifier-hover);
+}
+
+/* Dropdown (floating) */
+.smart-sync-dropdown {
+    position: fixed;
+    z-index: 1000;
+}
+
+.smart-sync-dropdown-content {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    min-width: 180px;
+    width: 180px;
+    overflow: hidden;
+    display: none;
+}
+
+.smart-sync-dropdown.open .smart-sync-dropdown-content {
+    display: block;
+}
+
+.smart-sync-dropdown-item {
+    width: 100%;
+    padding: 12px 16px;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.smart-sync-dropdown-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+/* Context Menu (floating) */
+.smart-sync-context-menu {
+    position: fixed;
+    z-index: 1000;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    min-width: 160px;
+    width: 160px;
+    overflow: hidden;
+    display: none;
+}
+
+.smart-sync-context-menu.open {
+    display: block;
+}
+
+.smart-sync-context-item {
+    width: 100%;
+    padding: 10px 16px;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.smart-sync-context-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+/* ============= FOOTER ============= */
+.smart-sync-footer {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 24px 20px;
+
+    background: var(--background-secondary);
+    border-top: 1px solid var(--background-modifier-border);
+    flex-shrink: 0;
+}
+
+.smart-sync-footer-spacer {
+    flex: 1;
+}
+
+.smart-sync-footer-right {
+    position: absolute;
+    right: 20px;
+    display: flex;
+    gap: 8px;
+}
+
+.smart-sync-footer-btn {
+    padding: 10px 20px;
+    background: var(--interactive-normal);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.smart-sync-footer-btn:hover {
+    background: var(--interactive-hover);
     border-color: var(--interactive-hover);
 }
 
-.smart-sync-button:active {
-    transform: translateY(0);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-/* Button section styling */
-.smart-sync-button-section {
-    margin-bottom: 24px;
-}
-
-.smart-sync-section-title {
-    font-size: var(--font-ui-small);
-    font-weight: var(--font-semibold);
-    color: var(--text-muted);
-    margin: 0 0 12px 0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.advanced-section {
-    display: none;
-    animation: slideDown 0.3s ease-out;
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
- .sync-empty-message {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 200px;
-    background: var(--background-secondary);
-    border-radius: 8px;
-    border: 1px solid var(--background-modifier-border);
-    margin: 20px 0;
-}
-
-.sync-empty-text {
-    font-size: var(--font-ui-larger);
-    color: var(--text-success);
-    font-weight: var(--font-medium);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.sync-empty-text::before {
-    content: "✅";
-    font-size: var(--font-ui-large);
-}
-
-.file-user-disabled {
-    color: var(--text-muted);
-    opacity: 0.6;
-    font-style: italic;
-}
-
-.file-user-upload {
-    color: var(--color-pink);
-    background: rgba(236, 72, 153, 0.1);
-    border-left: 3px solid var(--color-pink);
-}
-
-.file-user-download {
-    color: var(--color-blue);
-    background: rgba(59, 130, 246, 0.1);
-    border-left: 3px solid var(--color-blue);
-}
-
-.button-danger {
-    background: var(--color-red) !important;
-    border-color: var(--color-red) !important;
-    color: white !important;
-}
-
-.button-danger:hover {
-    background: var(--color-red-hover, #dc2626) !important;
-    border-color: var(--color-red-hover, #dc2626) !important;
-}
-
-/* Status indicators for different sync states */
-.status-indicator {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
-.status-added { background: var(--color-green); }
-.status-deleted { background: var(--color-red); }
-.status-modified { background: var(--color-orange); }
-.status-except { background: var(--color-yellow); }
-
-/* Responsive design improvements */
-@media (max-width: 768px) {
-    .smart-sync-modal {
-        width: 95vw;
-        min-width: unset;
-    }
-
-    .smart-sync-container {
-        padding: 15px;
-    }
-
-    .smart-sync-button-container {
-        width: 200px;
-        padding: 8px;
-        gap: 8px;
-    }
-
-    .smart-sync-button {
-        font-size: var(--font-ui-smaller);
-        padding: 10px 12px;
-    }
-
-    .sync-location-title {
-        font-size: var(--font-ui-medium);
-    }
-
-    .sync-file-entry {
-        font-size: var(--font-ui-smaller);
-    }
-}
-
-/* Narrow aspect ratio improvements */
-@media (max-width: 600px) {
-    .smart-sync-modal {
-        width: 98vw;
-        min-width: unset;
-    }
-
-    .smart-sync-button-container {
-        width: 220px;
-    }
-
-    .smart-sync-button {
-        min-width: unset;
-        padding: 10px 12px;
-        font-size: var(--font-ui-smaller);
-    }
-
-    .smart-sync-section-title {
-        font-size: var(--font-ui-smaller);
-        margin-bottom: 8px;
-    }
-}
-
-/* Dark mode improvements */
-.theme-dark .smart-sync-button-container {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.theme-dark .smart-sync-file-tree {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-/* Loading and animation states */
-.smart-sync-button.loading {
-    position: relative;
-    color: transparent !important;
-}
-
-.smart-sync-button.loading::after {
-    content: "";
+.smart-sync-primary-btn {
     position: absolute;
-    width: 16px;
-    height: 16px;
-    top: 50%;
     left: 50%;
-    margin-left: -8px;
-    margin-top: -8px;
-    border: 2px solid transparent;
-    border-top-color: currentColor;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
+    transform: translateX(-50%);
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    padding: 10px 24px;
 }
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+.smart-sync-primary-btn:hover {
+    background: var(--interactive-accent-hover);
+    border-color: var(--interactive-accent-hover);
 }
 
-/* Improved scrollbars */
-.smart-sync-file-tree::-webkit-scrollbar {
+/* Confirmation Dialog */
+.smart-sync-confirm-text {
+    padding: 20px;
+    font-size: var(--font-ui-medium);
+    text-align: center;
+}
+
+.smart-sync-confirm-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    padding: 0 20px 20px;
+}
+
+.smart-sync-confirm-btn {
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-size: var(--font-ui-small);
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    border: 1px solid var(--background-modifier-border);
+}
+
+/* Scrollbar Styling */
+.smart-sync-files-area::-webkit-scrollbar,
+.smart-sync-files-list::-webkit-scrollbar {
     width: 8px;
 }
 
-.smart-sync-file-tree::-webkit-scrollbar-track {
+.smart-sync-files-area::-webkit-scrollbar-track,
+.smart-sync-files-list::-webkit-scrollbar-track {
     background: var(--background-secondary);
     border-radius: 4px;
 }
 
-.smart-sync-file-tree::-webkit-scrollbar-thumb {
+.smart-sync-files-area::-webkit-scrollbar-thumb,
+.smart-sync-files-list::-webkit-scrollbar-thumb {
     background: var(--background-modifier-border-hover);
     border-radius: 4px;
 }
 
-.smart-sync-file-tree::-webkit-scrollbar-thumb:hover {
+.smart-sync-files-area::-webkit-scrollbar-thumb:hover,
+.smart-sync-files-list::-webkit-scrollbar-thumb:hover {
     background: var(--interactive-normal);
 }
 
-/* Status bar styling */
-.smart-sync-status-bar {
-    padding: 12px 16px;
-    background: var(--background-secondary);
-    border-radius: 8px;
-    border: 1px solid var(--background-modifier-border);
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: var(--font-ui-small);
-    font-weight: var(--font-medium);
-    transition: all 0.2s ease;
-    cursor: default;
+/* ============= RESPONSIVE DESIGN ============= */
+@media (max-width: 768px) {
+    .smart-sync-modal {
+        width: 100vw;
+        height: 100vh;
+        max-width: none;
+        max-height: none;
+        border-radius: 0;
+    }
+
+    .smart-sync-header {
+        padding: 12px;
+        gap: 8px;
+        overflow-x: auto;
+    }
+
+    .smart-sync-header-btn {
+        padding: 6px 12px;
+        font-size: var(--font-ui-smaller);
+        white-space: nowrap;
+    }
+
+    .smart-sync-files-area {
+        padding: 12px;
+    }
+
+    .smart-sync-file-row {
+        flex-wrap: wrap;
+        padding: 10px 8px;
+        gap: 6px;
+    }
+
+    .smart-sync-action-select {
+        font-size: 10px;
+        padding: 3px 6px;
+        min-width: 60px;
+    }
+
+    .smart-sync-path-container {
+        font-size: var(--font-ui-smaller);
+        min-width: 100px;
+        flex-basis: 150px;
+    }
+
+    .smart-sync-footer {
+        flex-wrap: wrap;
+        padding: 12px;
+        gap: 8px;
+        height: auto;
+    }
+
+    .smart-sync-footer-spacer {
+        display: none;
+    }
+
+    .smart-sync-primary-btn {
+        position: static;
+        transform: none;
+        order: -1;
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    .smart-sync-footer-right {
+        position: static;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .smart-sync-footer-btn {
+        flex: 1;
+        min-width: 80px;
+        padding: 10px 12px;
+        font-size: var(--font-ui-smaller);
+    }
 }
 
-.smart-sync-status-bar.clickable {
-    cursor: pointer;
+@media (max-width: 480px) {
+    .smart-sync-location-title,
+    .smart-sync-section-title {
+        font-size: var(--font-ui-medium);
+        padding: 10px 12px;
+    }
+
+    .smart-sync-file-row {
+        font-size: var(--font-ui-smaller);
+    }
+
+    .smart-sync-checkbox {
+        font-size: 16px;
+        min-width: 24px;
+    }
+
+    .smart-sync-menu-btn {
+        font-size: 18px;
+        min-width: 20px;
+    }
+
+    .smart-sync-dropdown-content,
+    .smart-sync-context-menu {
+        font-size: var(--font-ui-smaller);
+    }
 }
 
-.smart-sync-status-bar.clickable:hover {
-    background: var(--background-modifier-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
-    border-color: var(--interactive-hover);
+/* Dark mode tweaks */
+.theme-dark .smart-sync-modal {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
-.smart-sync-status-bar.clickable:active {
-    transform: translateY(0);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-
-.smart-sync-status-text {
-    flex: 1;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-@keyframes blink {
-    0%, 50%, 100% { opacity: 1; }
-    25%, 75% { opacity: 0.3; }
+.theme-dark .smart-sync-dropdown-content,
+.theme-dark .smart-sync-context-menu {
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
