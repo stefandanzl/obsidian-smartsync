@@ -41,7 +41,7 @@ export class FileTreeModal extends Modal {
 
         const reloadBtn = header.createEl("button", {
             text: "🔄 Reload",
-            cls: "smart-sync-header-btn",
+            cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
         });
         reloadBtn.addEventListener("click", () => {
             this.plugin.operations.check();
@@ -98,7 +98,7 @@ export class FileTreeModal extends Modal {
         this.createDropdown(maintenanceBtn, [
             { label: "❌ Clear Error States", action: () => this.clearErrors() },
             { label: "💾 Save Vault State", action: () => this.plugin.saveState() },
-            { label: "⚙️ Settings", action: () => this.openSettings() },
+            { label: "⚙️ SmartSync Settings", action: () => this.openSettings() },
             { label: "⏸️ Pause Sync", action: () => this.togglePause() },
         ]);
 
@@ -509,9 +509,10 @@ export class FileTreeModal extends Modal {
         }
     }
 
-    private openFile(path: string) {
+    private async openFile(path: string) {
         if (path.endsWith("/")) return;
         if (path.startsWith(this.app.vault.configDir)) return;
+        if (!(await this.app.vault.adapter.exists(path))) return;
         this.app.workspace.openLinkText(path, "", "tab");
     }
 

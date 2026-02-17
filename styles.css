@@ -58,6 +58,10 @@
     border-color: var(--interactive-hover);
 }
 
+.smart-sync-header-btn-right {
+    margin-left: auto;
+}
+
 /* ============= FILES AREA ============= */
 .smart-sync-files-area {
     flex: 1;
