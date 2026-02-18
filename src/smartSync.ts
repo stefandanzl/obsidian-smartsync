@@ -71,7 +71,7 @@ export class SmartSyncClient {
                     ...(this.createAuthHeader() ? { Authorization: this.createAuthHeader() } : {}),
                 },
             });
-            console.log("SmartSync getStatus response:", response.status, response.json);
+            // console.log("SmartSync getStatus response:", response.status, response.json);
             // Validate response structure
             if (!response.json || typeof response.json.online !== "boolean") {
                 console.error("Invalid status response structure:", response.json);
