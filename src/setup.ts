@@ -12,14 +12,13 @@ import { DailyNoteManager } from "./dailynote";
 
 export async function launcher(plugin: SmartSync) {
     await plugin.loadSettings();
-    plugin.doLog = false;
 
     // plugin adds a settings tab so the user can configure various aspects of the plugin
     plugin.addSettingTab(new SmartSyncSettingsTab(plugin.app, plugin));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     plugin.settingPrivate = (this.app as any).setting;
-    plugin.tempExcludedFiles = {};
+    plugin.selectedFiles = {};
 
     plugin.compare = new Compare(plugin);
     plugin.checksum = new Checksum(plugin);

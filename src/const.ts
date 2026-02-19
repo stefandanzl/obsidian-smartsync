@@ -163,6 +163,8 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
     dailyNotesFormat: "YYYY/YYYY-MM/YYYY-MM-DD ddd",
     dailyNotesTemplate: "",
     dailyNotesTimestamp: true,
+
+    debugMode: false,
 };
 
 export interface SmartSyncSettings {
@@ -185,4 +187,6 @@ export interface SmartSyncSettings {
     dailyNotesFormat: string;
     dailyNotesTemplate: string;
     dailyNotesTimestamp: boolean;
+
+    debugMode: boolean;
 }

@@ -223,5 +223,16 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 })
             );
+
+        new Setting(containerEl)
+            .setName("Debug Mode")
+            .setDesc("Enable verbose logging to console")
+            .addToggle((toggle) =>
+                toggle.setValue(this.plugin.settings.debugMode).onChange(async (value) => {
+                    this.plugin.settings.debugMode = value;
+                    console.log("DEBUG mode is ", value);
+                    await this.plugin.saveSettings();
+                })
+            );
     }
 }

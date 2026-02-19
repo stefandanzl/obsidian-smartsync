@@ -23,7 +23,6 @@ import { DailyNoteManager } from "./dailynote";
 
 export default class SmartSync extends Plugin {
     message: string | Array<string[]> | string[] | unknown[];
-    doLog: boolean;
     settings: SmartSyncSettings;
     compare: Compare;
     checksum: Checksum;
@@ -57,6 +56,16 @@ export default class SmartSync extends Plugin {
 
     notice: Notice;
     pause: boolean;
+    isSyncing: boolean;
+    selectedFiles: Record<
+        string,
+        {
+            location: Location;
+            type: Type;
+            hash: Hash;
+            selected: boolean;
+        }
+    >;
 
     mobile: boolean;
     localFiles: FileList;
@@ -88,14 +97,8 @@ export default class SmartSync extends Plugin {
     }
 
     log(...text: string[] | unknown[]) {
-        /**
-         * Set this value for excessive log output
-         *
-         */
-        // const doLog = true;
         this.message = text;
-        if (this.doLog) {
-            // if (true) {
+        if (this.settings.debugMode) {
             console.log(...text);
         }
     }
@@ -172,6 +175,10 @@ export default class SmartSync extends Plugin {
 
     async liveSyncCallback(abstractFile: TAbstractFile) {
         this.log("liveSync outer");
+        if (this.isSyncing) {
+            this.log("Skipping live sync during sync operation");
+            return;
+        }
         if (abstractFile instanceof TFile) {
             // const now = Date.now();
             // const minInterval = this.connectionError ? 20000 : 5000;
@@ -274,13 +281,16 @@ export default class SmartSync extends Plugin {
 
                 const files = await this.checksum.generateLocalHashTree(false);
 
-                console.log("tempExcludedFiles: ", this.tempExcludedFiles);
+                console.log("selectedFiles: ", this.selectedFiles);
 
-                Object.keys(this.tempExcludedFiles).forEach((path) => {
-                    if (path in this.prevData.files) {
-                        files[path] = this.prevData.files[path];
-                    } else {
-                        delete files[path];
+                // Preserve old hashes for files where selected is false
+                Object.keys(this.selectedFiles).forEach((path) => {
+                    if (this.selectedFiles[path].selected === false) {
+                        if (path in this.prevData.files) {
+                            files[path] = this.prevData.files[path];
+                        } else {
+                            delete files[path];
+                        }
                     }
                 });
 

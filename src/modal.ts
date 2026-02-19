@@ -1,15 +1,13 @@
 import { App, Modal, Notice } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { DiffModal } from "./diffModal";
-import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, Type } from "./const";
+import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, Type, Hash } from "./const";
 import { dirname } from "./util";
 
 type ExplicitAction = "push" | "pull" | "default";
-type FileSelection = Set<string>;
 
 export class FileTreeModal extends Modal {
     fileTreeDiv: HTMLDivElement;
-    selectedFiles: FileSelection = new Set();
     fileExplicitActions: Map<string, ExplicitAction> = new Map();
     dropdownContainer: HTMLDivElement;
     statusIndicator: HTMLSpanElement;
@@ -129,13 +127,23 @@ export class FileTreeModal extends Modal {
 
     private toggleSelectAll(btn: HTMLButtonElement) {
         const allPaths = this.getAllFilePaths();
-        const allSelected = allPaths.length > 0 && this.selectedFiles.size === allPaths.length;
+        const allSelected = allPaths.length > 0 && allPaths.every((path) => this.plugin.selectedFiles[path]?.selected === true);
 
         if (allSelected) {
-            this.selectedFiles.clear();
+            // Deselect all
+            allPaths.forEach((path) => {
+                if (this.plugin.selectedFiles[path]) {
+                    this.plugin.selectedFiles[path].selected = false;
+                }
+            });
             btn.textContent = "☑️ Select All";
         } else {
-            allPaths.forEach((path) => this.selectedFiles.add(path));
+            // Select all
+            allPaths.forEach((path) => {
+                if (this.plugin.selectedFiles[path]) {
+                    this.plugin.selectedFiles[path].selected = true;
+                }
+            });
             btn.textContent = "☐ Select None";
         }
         this.renderFileTrees();
@@ -143,17 +151,49 @@ export class FileTreeModal extends Modal {
     }
 
     private toggleFileSelection(path: string) {
-        if (this.selectedFiles.has(path)) {
-            this.selectedFiles.delete(path);
-        } else {
-            this.selectedFiles.add(path);
+        if (this.plugin.selectedFiles[path]) {
+            this.plugin.selectedFiles[path].selected = !this.plugin.selectedFiles[path].selected;
         }
         this.updateSyncButton();
     }
 
     private updateSyncButton() {
-        const count = this.selectedFiles.size;
+        const count = Object.values(this.plugin.selectedFiles).filter((v) => v.selected === true).length;
         this.syncButton.textContent = `🔄 Sync (${count})`;
+    }
+
+    private initializeSelectedFiles() {
+        if (!this.plugin.fullFileTrees) return;
+
+        // First, collect all current paths from fullFileTrees
+        const currentPaths = new Set<string>();
+        const locations: (keyof FileTrees)[] = ["localFiles", "remoteFiles"];
+        const types: (keyof FileTree)[] = ["added", "modified", "deleted", "except"];
+
+        locations.forEach((locationKey) => {
+            types.forEach((typeKey) => {
+                const files = this.plugin.fullFileTrees![locationKey][typeKey];
+                Object.entries(files).forEach(([path, hash]) => {
+                    currentPaths.add(path);
+                    // Only add if not already present (preserve existing selections)
+                    if (!this.plugin.selectedFiles[path]) {
+                        this.plugin.selectedFiles[path] = {
+                            location: locationKey,
+                            type: typeKey,
+                            hash: hash as Hash,
+                            selected: true,  // Default to selected
+                        };
+                    }
+                });
+            });
+        });
+
+        // Remove entries for files that are no longer in fullFileTrees
+        Object.keys(this.plugin.selectedFiles).forEach((path) => {
+            if (!currentPaths.has(path)) {
+                delete this.plugin.selectedFiles[path];
+            }
+        });
     }
 
     updateStatusIndicator() {
@@ -252,7 +292,8 @@ export class FileTreeModal extends Modal {
     }
 
     private async syncSelected() {
-        if (this.selectedFiles.size === 0) {
+        const selectedCount = Object.values(this.plugin.selectedFiles).filter((v) => v.selected === true).length;
+        if (selectedCount === 0) {
             new Notice("No files selected");
             return;
         }
@@ -260,11 +301,15 @@ export class FileTreeModal extends Modal {
     }
 
     private async pushSelected() {
-        new Notice(`Pushing ${this.selectedFiles.size} files`);
+        const selectedCount = Object.values(this.plugin.selectedFiles).filter((v) => v.selected === true).length;
+        new Notice(`Pushing ${selectedCount} files`);
+        this.plugin.operations.push();
     }
 
     private async pullSelected() {
-        new Notice(`Pulling ${this.selectedFiles.size} files`);
+        const selectedCount = Object.values(this.plugin.selectedFiles).filter((v) => v.selected === true).length;
+        new Notice(`Pulling ${selectedCount} files`);
+        this.plugin.operations.pull();
     }
 
     private clearErrors() {
@@ -283,6 +328,7 @@ export class FileTreeModal extends Modal {
     }
 
     renderFileTrees() {
+        this.initializeSelectedFiles();
         this.fileTreeDiv.empty();
 
         if (!this.plugin.fullFileTrees) {
@@ -347,19 +393,21 @@ export class FileTreeModal extends Modal {
     }
 
     private renderFileRow(container: HTMLElement, path: string, _location: Location, _type: Type) {
+        const isSelected = this.plugin.selectedFiles[path]?.selected === true;
         const row = container.createDiv({
-            cls: ["smart-sync-file-row", this.selectedFiles.has(path) ? "selected" : ""],
+            cls: ["smart-sync-file-row", isSelected ? "selected" : ""],
             attr: { "data-path": path },
         });
 
         // Checkbox
         const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
-        checkbox.innerHTML = this.selectedFiles.has(path) ? "☑️" : "☐";
+        checkbox.innerHTML = isSelected ? "☑️" : "☐";
         checkbox.addEventListener("click", (e) => {
             e.stopPropagation();
             this.toggleFileSelection(path);
-            checkbox.innerHTML = this.selectedFiles.has(path) ? "☑️" : "☐";
-            row.toggleClass("selected", this.selectedFiles.has(path));
+            const nowSelected = this.plugin.selectedFiles[path]?.selected === true;
+            checkbox.innerHTML = nowSelected ? "☑️" : "☐";
+            row.toggleClass("selected", nowSelected);
         });
 
         // File path (clickable parts)

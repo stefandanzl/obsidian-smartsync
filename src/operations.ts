@@ -2,7 +2,7 @@ import SmartSyncPlugin from "./main";
 import { SmartSyncClient } from "./smartSync";
 import { join, dirname, calcDuration, logNotice } from "./util";
 import { normalizePath } from "obsidian";
-import { Controller, FileList, Status, STATUS_ITEMS } from "./const";
+import { Controller, FileList, FileTree, FileTrees, Status, STATUS_ITEMS } from "./const";
 
 export class Operations {
     constructor(public plugin: SmartSyncPlugin) {
@@ -396,7 +396,7 @@ export class Operations {
                 }
             }
             this.plugin.lastScrollPosition = 0;
-            this.plugin.tempExcludedFiles = {};
+            // this.plugin.tempExcludedFiles = {};
             this.plugin.modal?.renderFileTrees();
             ok && this.plugin.setStatus(Status.NONE);
             return true;
@@ -407,6 +407,44 @@ export class Operations {
             response ? this.plugin.setStatus(Status.ERROR) : this.plugin.setStatus(Status.OFFLINE);
             throw error;
         }
+    }
+
+    /**
+     * Filter fileTrees to only include selected files
+     */
+    private filterSelectedFiles(fileTrees: FileTrees): FileTrees {
+        const selectedFiles = this.plugin.selectedFiles;
+
+        if (!selectedFiles || Object.keys(selectedFiles).length === 0) {
+            // No selection filter, return original
+            return fileTrees;
+        }
+
+        const filterFileList = (fileList: FileList): FileList => {
+            const filtered: FileList = {};
+            for (const [path, hash] of Object.entries(fileList)) {
+                // Include file if selectedFiles[path] is true or undefined (not in list = sync all)
+                const fileData = selectedFiles[path];
+                if (!fileData || fileData.selected !== false) {
+                    filtered[path] = hash;
+                }
+            }
+            return filtered;
+        };
+
+        const filterFileTree = (fileTree: FileTree): FileTree => {
+            return {
+                added: filterFileList(fileTree.added),
+                deleted: filterFileList(fileTree.deleted),
+                modified: filterFileList(fileTree.modified),
+                except: filterFileList(fileTree.except),
+            };
+        };
+
+        return {
+            remoteFiles: filterFileTree(fileTrees.remoteFiles),
+            localFiles: filterFileTree(fileTrees.localFiles),
+        };
     }
 
     /**
@@ -424,6 +462,7 @@ export class Operations {
         }
 
         try {
+            this.plugin.isSyncing = true;
             console.log("[SYNC] Testing connection...");
             if (!(await this.test(false))) {
                 console.log("[SYNC] Connection test failed, aborting sync");
@@ -447,27 +486,30 @@ export class Operations {
 
             this.plugin.setStatus(Status.SYNC);
 
+            // Filter fileTrees to only include selected files
+            const fileTreesSelected = this.filterSelectedFiles(this.plugin.fileTrees);
+
             // Calculate total operations needed
             const operationsToCount = [];
 
             if (controller.remote) {
-                if (controller.remote.added) operationsToCount.push(this.plugin.fileTrees.remoteFiles.added);
-                if (controller.remote.modified) operationsToCount.push(this.plugin.fileTrees.remoteFiles.modified);
-                if (controller.remote.deleted) operationsToCount.push(this.plugin.fileTrees.remoteFiles.deleted);
-                if (controller.remote.except) operationsToCount.push(this.plugin.fileTrees.remoteFiles.except);
+                if (controller.remote.added) operationsToCount.push(fileTreesSelected.remoteFiles.added);
+                if (controller.remote.modified) operationsToCount.push(fileTreesSelected.remoteFiles.modified);
+                if (controller.remote.deleted) operationsToCount.push(fileTreesSelected.remoteFiles.deleted);
+                if (controller.remote.except) operationsToCount.push(fileTreesSelected.remoteFiles.except);
             }
 
             if (controller.local) {
-                if (controller.local.added) operationsToCount.push(this.plugin.fileTrees.localFiles.added);
-                if (controller.local.modified) operationsToCount.push(this.plugin.fileTrees.localFiles.modified);
-                if (controller.local.deleted) operationsToCount.push(this.plugin.fileTrees.localFiles.deleted);
-                if (controller.local.except) operationsToCount.push(this.plugin.fileTrees.localFiles.except);
+                if (controller.local.added) operationsToCount.push(fileTreesSelected.localFiles.added);
+                if (controller.local.modified) operationsToCount.push(fileTreesSelected.localFiles.modified);
+                if (controller.local.deleted) operationsToCount.push(fileTreesSelected.localFiles.deleted);
+                if (controller.local.except) operationsToCount.push(fileTreesSelected.localFiles.except);
             }
 
             const total = this.plugin.calcTotal(...operationsToCount.filter(Boolean));
 
             if (total === 0) {
-                if (Object.keys(this.plugin.fileTrees.localFiles.except).length > 0) {
+                if (Object.keys(fileTreesSelected.localFiles.except).length > 0) {
                     show && this.plugin.show("You have file sync exceptions. Clear them in SmartSync Control Panel.", 5000);
                 } else {
                     show && this.plugin.show("No files to sync");
@@ -484,54 +526,54 @@ export class Operations {
             // Handle Remote operations
             if (controller.remote) {
                 if (controller.remote.added === 1) {
-                    operations.push(this.plugin.operations.downloadFiles(this.plugin.fileTrees.remoteFiles.added));
+                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remoteFiles.added));
                 } else if (controller.remote.added === -1) {
-                    operations.push(this.plugin.operations.deleteFilesRemote(this.plugin.fileTrees.remoteFiles.added));
+                    operations.push(this.plugin.operations.deleteFilesRemote(fileTreesSelected.remoteFiles.added));
                 }
 
                 if (controller.remote.deleted === 1) {
-                    operations.push(this.plugin.operations.deleteFilesLocal(this.plugin.fileTrees.remoteFiles.deleted));
+                    operations.push(this.plugin.operations.deleteFilesLocal(fileTreesSelected.remoteFiles.deleted));
                 } else if (controller.remote.deleted === -1) {
-                    operations.push(this.plugin.operations.uploadFiles(this.plugin.fileTrees.remoteFiles.deleted));
+                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remoteFiles.deleted));
                 }
 
                 if (controller.remote.modified === 1) {
-                    operations.push(this.plugin.operations.downloadFiles(this.plugin.fileTrees.remoteFiles.modified));
+                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remoteFiles.modified));
                 } else if (controller.remote.modified === -1) {
-                    operations.push(this.plugin.operations.uploadFiles(this.plugin.fileTrees.remoteFiles.modified));
+                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remoteFiles.modified));
                 }
 
                 if (controller.remote.except === 1) {
-                    operations.push(this.plugin.operations.downloadFiles(this.plugin.fileTrees.remoteFiles.except));
+                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remoteFiles.except));
                 } else if (controller.remote.except === -1) {
-                    operations.push(this.plugin.operations.uploadFiles(this.plugin.fileTrees.remoteFiles.except));
+                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remoteFiles.except));
                 }
             }
 
             // Handle Local operations
             if (controller.local) {
                 if (controller.local.added === 1) {
-                    operations.push(this.plugin.operations.uploadFiles(this.plugin.fileTrees.localFiles.added));
+                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.localFiles.added));
                 } else if (controller.local.added === -1) {
-                    operations.push(this.plugin.operations.deleteFilesLocal(this.plugin.fileTrees.localFiles.added));
+                    operations.push(this.plugin.operations.deleteFilesLocal(fileTreesSelected.localFiles.added));
                 }
 
                 if (controller.local.deleted === 1) {
-                    operations.push(this.plugin.operations.deleteFilesRemote(this.plugin.fileTrees.localFiles.deleted));
+                    operations.push(this.plugin.operations.deleteFilesRemote(fileTreesSelected.localFiles.deleted));
                 } else if (controller.local.deleted === -1) {
-                    operations.push(this.plugin.operations.downloadFiles(this.plugin.fileTrees.localFiles.deleted));
+                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.localFiles.deleted));
                 }
 
                 if (controller.local.modified === 1) {
-                    operations.push(this.plugin.operations.uploadFiles(this.plugin.fileTrees.localFiles.modified));
+                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.localFiles.modified));
                 } else if (controller.local.modified === -1) {
-                    operations.push(this.plugin.operations.downloadFiles(this.plugin.fileTrees.localFiles.modified));
+                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.localFiles.modified));
                 }
 
                 if (controller.local.except === 1) {
-                    operations.push(this.plugin.operations.uploadFiles(this.plugin.fileTrees.localFiles.except));
+                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.localFiles.except));
                 } else if (controller.local.except === -1) {
-                    operations.push(this.plugin.operations.downloadFiles(this.plugin.fileTrees.localFiles.except));
+                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.localFiles.except));
                 }
             }
 
@@ -544,7 +586,7 @@ export class Operations {
 
             await this.check(true);
 
-            this.plugin.tempExcludedFiles = {};
+            // this.plugin.tempExcludedFiles = {};
 
             show && this.plugin.show("Done");
             this.plugin.setStatus(Status.NONE);
@@ -554,6 +596,7 @@ export class Operations {
             this.plugin.setError(true);
             this.plugin.setStatus(Status.ERROR);
         } finally {
+            this.plugin.isSyncing = false;
             this.plugin.finished();
         }
     }
