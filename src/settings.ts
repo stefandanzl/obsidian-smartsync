@@ -92,9 +92,9 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
             .setName("Mod Sync")
             .setDesc("Enable Synchronization on modification")
             .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.liveSync).onChange(async (value) => {
-                    this.plugin.settings.liveSync = value;
-                    this.plugin.setLiveSync();
+                toggle.setValue(this.plugin.settings.modSync).onChange(async (value) => {
+                    this.plugin.settings.modSync = value;
+                    this.plugin.setModSync();
                     await this.plugin.saveSettings();
                 })
             );

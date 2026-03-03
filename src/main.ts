@@ -51,8 +51,8 @@ export default class SmartSync extends Plugin {
     intervalId: number;
     status: Status;
     lastFileEdited: string;
-    lastLiveSync: number;
-    liveSyncTimeouts: Record<string, NodeJS.Timeout | null> = {};
+    lastModSync: number;
+    modSyncTimeouts: Record<string, NodeJS.Timeout | null> = {};
     modifyHandlerRef: ((file: TAbstractFile) => void) | null = null;
 
     notice: Notice;
@@ -158,38 +158,38 @@ export default class SmartSync extends Plugin {
         }
     }
 
-    async renewLiveSyncTimeout(abstractFile: TFile, attempt = 0) {
+    async renewModSyncTimeout(abstractFile: TFile, attempt = 0) {
         const filePath: string = abstractFile.path;
-        const timeoutId = this.liveSyncTimeouts[filePath];
+        const timeoutId = this.modSyncTimeouts[filePath];
         if (timeoutId) {
             clearTimeout(timeoutId);
-            delete this.liveSyncTimeouts[filePath];
+            delete this.modSyncTimeouts[filePath];
         }
 
         const delay = Math.min(10000 * Math.pow(1.5, attempt), 60000); // Cap at 1 minute
 
-        this.liveSyncTimeouts[filePath] = setTimeout(() => {
-            this.log(`Live Sync: ${delay / 1000} seconds have passed`);
-            this.liveSyncCallback(abstractFile);
+        this.modSyncTimeouts[filePath] = setTimeout(() => {
+            this.log(`Mod Sync: ${delay / 1000} seconds have passed`);
+            this.modSyncCallback(abstractFile);
         }, delay);
     }
 
-    async liveSyncCallback(abstractFile: TAbstractFile) {
-        this.log("liveSync outer");
+    async modSyncCallback(abstractFile: TAbstractFile) {
+        this.log("modSync outer");
         if (this.isSyncing) {
-            this.log("Skipping live sync during sync operation");
+            this.log("Skipping mod sync during sync operation");
             return;
         }
         if (abstractFile instanceof TFile) {
             // const now = Date.now();
             // const minInterval = this.connectionError ? 20000 : 5000;
 
-            // if (now - this.lastLiveSync < minInterval) {
+            // if (now - this.lastModSync < minInterval) {
             //     return;
             // }
 
             if (this.status === Status.NONE || this.status === Status.OFFLINE) {
-                this.lastLiveSync = Date.now();
+                this.lastModSync = Date.now();
 
                 this.setStatus(Status.AUTO);
 
@@ -197,10 +197,10 @@ export default class SmartSync extends Plugin {
                     const file: TFile = abstractFile;
                     const filePath: string = file.path;
 
-                    const timeoutId = this.liveSyncTimeouts[filePath];
+                    const timeoutId = this.modSyncTimeouts[filePath];
                     if (timeoutId) {
                         clearTimeout(timeoutId);
-                        delete this.liveSyncTimeouts[filePath];
+                        delete this.modSyncTimeouts[filePath];
                     }
 
                     this.log(filePath);
@@ -211,7 +211,7 @@ export default class SmartSync extends Plugin {
                     const response = await this.smartSyncClient.uploadFile(remoteFilePath, data);
                     if (!response) {
                         this.setStatus(Status.OFFLINE);
-                        this.renewLiveSyncTimeout(abstractFile);
+                        this.renewModSyncTimeout(abstractFile);
                         return;
                     }
 
@@ -220,28 +220,28 @@ export default class SmartSync extends Plugin {
 
                     this.setStatus(Status.NONE);
                 } catch (error) {
-                    console.log("LiveSync Connectivity ERROR!");
-                    this.show("LiveSync Error");
-                    this.lastLiveSync = Date.now();
+                    console.log("ModSync Connectivity ERROR!");
+                    this.show("ModSync Error");
+                    this.lastModSync = Date.now();
                     this.setStatus(Status.ERROR);
                 }
             } else {
-                this.renewLiveSyncTimeout(abstractFile);
+                this.renewModSyncTimeout(abstractFile);
             }
         }
     }
 
-    setLiveSync() {
+    setModSync() {
         if (!this.modifyHandlerRef) {
             this.modifyHandlerRef = (file: TAbstractFile) => {
                 if (file instanceof TFile) {
                     this.lastFileEdited = file.path;
-                    this.liveSyncCallback(file);
+                    this.modSyncCallback(file);
                 }
             };
         }
 
-        if (this.settings.liveSync) {
+        if (this.settings.modSync) {
             this.registerEvent(this.app.vault.on("modify", this.modifyHandlerRef));
         } else {
             this.app.vault.off("modify", this.modifyHandlerRef);

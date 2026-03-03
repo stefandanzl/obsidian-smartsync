@@ -205,8 +205,8 @@ export async function launcher(plugin: SmartSync) {
     plugin.setStatus(Status.NONE);
     plugin.setClient();
 
-    if (plugin.settings.liveSync) {
-        plugin.setLiveSync();
+    if (plugin.settings.modSync) {
+        plugin.setModSync();
     }
 
     if (plugin.settings.autoSync) {

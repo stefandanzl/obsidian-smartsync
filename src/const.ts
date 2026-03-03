@@ -152,7 +152,7 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
     ignorePatterns: ["*.exe", "prevdata.json", ".obsidian/workspace.json", ".git*"],
     exclusionsOverride: false,
 
-    liveSync: false,
+    modSync: false,
     autoSync: false,
     autoSyncInterval: 30,
     enableRibbons: true,
@@ -174,7 +174,7 @@ export interface SmartSyncSettings {
     ignorePatterns: string[];
     exclusionsOverride: boolean;
 
-    liveSync: boolean;
+    modSync: boolean;
     autoSync: boolean;
     autoSyncInterval: number;
     modifySyncInterval: number;
