@@ -19,6 +19,7 @@ tasks:
         cmds:
             - task: build
             - task: copy
+            - task: reload-obsidian
     copy:
         cmds:
             - cp main.js "{{.DIR_PLUGIN}}/main.js"
@@ -28,6 +29,15 @@ tasks:
     build:
         cmds:
             - npm run build
+
+    reload:
+        cmds:
+            - obsidian plugin:reload id=smartsync
+
+    reload-obsidian:
+        cmds:
+            - obsidian command id=app:reload
+
     patch:
         cmds:
             - npm version patch
@@ -36,12 +46,7 @@ tasks:
             - git add .
             - git commit -m "task"
             - git push
-    # test:
-    #   cmds:
-    #     - npm test -env-file .env
-    research:
-        cmds:
-            - node tests/exclude/research.js
+
     minify:
         cmds:
             - terser main.js -o main.min.js

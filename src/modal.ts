@@ -181,7 +181,7 @@ export class FileTreeModal extends Modal {
                             location: locationKey,
                             type: typeKey,
                             hash: hash as Hash,
-                            selected: true,  // Default to selected
+                            selected: true, // Default to selected
                         };
                     }
                 });
@@ -330,6 +330,9 @@ export class FileTreeModal extends Modal {
     renderFileTrees() {
         this.initializeSelectedFiles();
         this.fileTreeDiv.empty();
+
+        this.plugin.log("=== Full Filetrees:===");
+        this.plugin.log(JSON.stringify(this.plugin.fullFileTrees, null, 2));
 
         if (!this.plugin.fullFileTrees) {
             this.fileTreeDiv.createEl("p", { text: "Loading...", cls: "smart-sync-loading" });

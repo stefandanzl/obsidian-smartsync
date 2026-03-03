@@ -6,7 +6,7 @@ type SmartSync = SmartSyncPlugin;
 import { Compare } from "./compare";
 import { Checksum } from "./checksum";
 import { Operations } from "./operations";
-import { Platform, setIcon } from "obsidian";
+import { CliData, Platform, setIcon } from "obsidian";
 import { Status } from "./const";
 import { DailyNoteManager } from "./dailynote";
 
@@ -121,7 +121,7 @@ export async function launcher(plugin: SmartSync) {
     });
 
     plugin.addCommand({
-        id: "display-smartSync-modal",
+        id: "display-modal",
         name: "Open SmartSync Control Panel modal",
         icon: "settings-2",
         callback: async () => {
@@ -130,11 +130,12 @@ export async function launcher(plugin: SmartSync) {
     });
 
     plugin.addCommand({
-        id: "smartSync-check",
+        id: "check",
         name: "Check for file changes",
         icon: "search",
         callback: async () => {
             plugin.operations.check();
+            // const output = ((params: CliData) => `Done!`)({});
         },
     });
 
@@ -157,7 +158,7 @@ export async function launcher(plugin: SmartSync) {
     */
 
     plugin.addCommand({
-        id: "smartSync-fullsync",
+        id: "fullsync",
         name: "Full Sync",
         icon: "arrow-down-up",
         callback: async () => {
@@ -166,7 +167,7 @@ export async function launcher(plugin: SmartSync) {
     });
 
     plugin.addCommand({
-        id: "smartSync-check-fullsync",
+        id: "check-fullsync",
         name: "Check and Full Sync",
         icon: "arrow-down-up",
         callback: async () => {

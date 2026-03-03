@@ -53,6 +53,7 @@ export default class SmartSync extends Plugin {
     lastFileEdited: string;
     lastLiveSync: number;
     liveSyncTimeouts: Record<string, NodeJS.Timeout | null> = {};
+    modifyHandlerRef: ((file: TAbstractFile) => void) | null = null;
 
     notice: Notice;
     pause: boolean;
@@ -231,17 +232,19 @@ export default class SmartSync extends Plugin {
     }
 
     setLiveSync() {
-        const modifyHandler = (file: TAbstractFile) => {
-            if (file instanceof TFile) {
-                this.lastFileEdited = file.path;
-                this.liveSyncCallback(file);
-            }
-        };
+        if (!this.modifyHandlerRef) {
+            this.modifyHandlerRef = (file: TAbstractFile) => {
+                if (file instanceof TFile) {
+                    this.lastFileEdited = file.path;
+                    this.liveSyncCallback(file);
+                }
+            };
+        }
 
         if (this.settings.liveSync) {
-            this.registerEvent(this.app.vault.on("modify", modifyHandler));
+            this.registerEvent(this.app.vault.on("modify", this.modifyHandlerRef));
         } else {
-            this.app.vault.off("modify", modifyHandler);
+            this.app.vault.off("modify", this.modifyHandlerRef);
         }
     }
 

@@ -248,7 +248,7 @@ export class Operations {
 
     async test(show = true) {
         try {
-            this.plugin.setStatus(Status.TEST);
+            show && this.plugin.setStatus(Status.TEST);
             show && this.plugin.show(`${Status.TEST} Testing ...`);
 
             const status = await this.plugin.smartSyncClient.getStatus();
@@ -257,7 +257,7 @@ export class Operations {
             if (status && status.online === true) {
                 show && this.plugin.show("Connection successful");
                 // ALWAYS set status to NONE after successful test, regardless of show parameter
-                this.plugin.setStatus(Status.NONE);
+                show && this.plugin.setStatus(Status.NONE);
 
                 if (this.plugin.prevData.error) {
                     this.plugin.show("Clear your ERROR state manually!");

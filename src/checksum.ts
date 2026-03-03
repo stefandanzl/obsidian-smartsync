@@ -183,11 +183,6 @@ export class Checksum {
             this.plugin.localFiles = this.allLocalFiles;
         }
 
-        // Log the local hash tree
-        this.plugin.log("=== LOCAL HASH TREE ===");
-        this.plugin.log(JSON.stringify(this.allLocalFiles, null, 2));
-        this.plugin.log(`=== END LOCAL HASH TREE (${Object.keys(this.allLocalFiles).length} files) ===`);
-
         return this.allLocalFiles;
     };
 
@@ -222,11 +217,6 @@ export class Checksum {
             }
 
             this.plugin.remoteFiles = remoteHashTree;
-
-            // Log the remote hash tree
-            this.plugin.log("=== REMOTE HASH TREE ===");
-            this.plugin.log(JSON.stringify(remoteHashTree, null, 2));
-            this.plugin.log(`=== END REMOTE HASH TREE (${Object.keys(remoteHashTree).length} files) ===`);
 
             return remoteHashTree;
         } catch (error) {
