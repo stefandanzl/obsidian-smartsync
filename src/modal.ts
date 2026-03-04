@@ -1,14 +1,11 @@
 import { App, Modal, Notice } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { DiffModal } from "./diffModal";
-import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, Type, Hash } from "./const";
+import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, Type, Hash, ExplicitAction } from "./const";
 import { dirname } from "./util";
-
-type ExplicitAction = "push" | "pull" | "default";
 
 export class FileTreeModal extends Modal {
     fileTreeDiv: HTMLDivElement;
-    fileExplicitActions: Map<string, ExplicitAction> = new Map();
     dropdownContainer: HTMLDivElement;
     statusIndicator: HTMLSpanElement;
 
@@ -391,6 +388,28 @@ export class FileTreeModal extends Modal {
             });
         });
 
+        // ============= CONFLICTS SECTION =============
+        const conflictFiles = this.plugin.fullFileTrees!.localFiles.except;
+        const hasConflicts = Object.keys(conflictFiles).length > 0;
+
+        if (hasConflicts) {
+            const conflictLocationEl = this.fileTreeDiv.createDiv({ cls: "smart-sync-location" });
+            conflictLocationEl.createDiv({ cls: "smart-sync-location-title", text: "⚔️ Conflicts" });
+
+            const conflictSectionEl = conflictLocationEl.createDiv({ cls: "smart-sync-section" });
+            conflictSectionEl.createDiv({
+                cls: ["smart-sync-section-title", "smart-sync-section-purple"],
+                text: `⚠️ Both sides changed (${Object.keys(conflictFiles).length})`,
+            });
+
+            const conflictFilesContainer = conflictSectionEl.createDiv({ cls: "smart-sync-files-list" });
+
+            Object.keys(conflictFiles).forEach((path) => {
+                // Render as conflict with both locations affected
+                this.renderConflictRow(conflictFilesContainer, path);
+            });
+        }
+
         // Restore scroll position
         this.fileTreeDiv.scrollTop = this.plugin.lastScrollPosition;
     }
@@ -442,7 +461,7 @@ export class FileTreeModal extends Modal {
         actionSelect.createEl("option", { value: "push", text: "⬆️ Push" });
         actionSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
 
-        const currentAction = this.fileExplicitActions.get(path);
+        const currentAction = this.plugin.fileExplicitActions.get(path);
         if (currentAction) {
             actionSelect.value = currentAction;
         } else {
@@ -452,9 +471,80 @@ export class FileTreeModal extends Modal {
         actionSelect.addEventListener("change", (e) => {
             const action = (e.target as HTMLSelectElement).value as ExplicitAction;
             if (action) {
-                this.fileExplicitActions.set(path, action);
+                this.plugin.fileExplicitActions.set(path, action);
             } else {
-                this.fileExplicitActions.delete(path);
+                this.plugin.fileExplicitActions.delete(path);
+            }
+        });
+
+        actionSelect.addEventListener("click", (e) => e.stopPropagation());
+
+        // Action menu button (three dots)
+        const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
+        menuBtn.addEventListener("click", (e) => e.stopPropagation());
+
+        this.createContextMenu(menuBtn, path);
+    }
+
+    private renderConflictRow(container: HTMLElement, path: string) {
+        const isSelected = this.plugin.selectedFiles[path]?.selected === true;
+        const row = container.createDiv({
+            cls: ["smart-sync-file-row", "smart-sync-conflict-row", isSelected ? "selected" : ""],
+            attr: { "data-path": path },
+        });
+
+        // Checkbox
+        const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
+        checkbox.innerHTML = isSelected ? "☑️" : "☐";
+        checkbox.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.toggleFileSelection(path);
+            const nowSelected = this.plugin.selectedFiles[path]?.selected === true;
+            checkbox.innerHTML = nowSelected ? "☑️" : "☐";
+            row.toggleClass("selected", nowSelected);
+        });
+
+        // Conflict icon + File path
+        const pathContainer = row.createDiv({ cls: "smart-sync-path-container" });
+
+        const icon = path.endsWith("/") ? "📁" : this.getFileIcon(path);
+        pathContainer.createSpan({ cls: "smart-sync-file-icon", text: icon });
+
+        // Split path into directory and filename
+        const lastSlash = path.lastIndexOf("/");
+        if (lastSlash > 0) {
+            const dirPart = path.substring(0, lastSlash + 1);
+            const filePart = path.substring(lastSlash + 1);
+
+            const dirEl = pathContainer.createSpan({ cls: "smart-sync-path-dir", text: dirPart });
+            dirEl.addEventListener("click", () => this.openInExplorer(path));
+
+            const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: filePart });
+            fileEl.addEventListener("click", () => this.openFile(path));
+        } else {
+            const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: path });
+            fileEl.addEventListener("click", () => this.openFile(path));
+        }
+
+        // Conflict resolution dropdown
+        const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
+        const blankOption = actionSelect.createEl("option", { value: "", text: "Choose action…" });
+        actionSelect.createEl("option", { value: "push", text: "⬆️ Keep Local" });
+        actionSelect.createEl("option", { value: "pull", text: "⬇️ Keep Remote" });
+
+        const currentAction = this.plugin.fileExplicitActions.get(path);
+        if (currentAction) {
+            actionSelect.value = currentAction;
+        } else {
+            blankOption.selected = true;
+        }
+
+        actionSelect.addEventListener("change", (e) => {
+            const action = (e.target as HTMLSelectElement).value as ExplicitAction;
+            if (action) {
+                this.plugin.fileExplicitActions.set(path, action);
+            } else {
+                this.plugin.fileExplicitActions.delete(path);
             }
         });
 

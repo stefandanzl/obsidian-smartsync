@@ -18,6 +18,7 @@ import {
     Hash,
     Location,
     Type,
+    ExplicitAction,
 } from "./const";
 import { DailyNoteManager } from "./dailynote";
 
@@ -69,6 +70,7 @@ export default class SmartSync extends Plugin {
     >;
 
     mobile: boolean;
+    fileExplicitActions: Map<string, ExplicitAction> = new Map();
     localFiles: FileList;
     remoteFiles: FileList;
     hashStats: {
@@ -282,7 +284,7 @@ export default class SmartSync extends Plugin {
                 // const oldPrevData = this.prevData.files;
                 // }
 
-                const files = await this.checksum.generateLocalHashTree(false);
+                const { files, end } = await this.checksum.generateLocalHashTree(false);
 
                 console.log("selectedFiles: ", this.selectedFiles);
 

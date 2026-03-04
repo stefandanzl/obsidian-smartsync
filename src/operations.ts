@@ -337,12 +337,13 @@ export class Operations {
 
             const localStart = Date.now();
             const localPromise = this.plugin.checksum.generateLocalHashTree(exclude);
-            stats.localScanTime = Date.now() - localStart;
 
             const [remoteFiles, localFiles] = await Promise.all([remotePromise, localPromise]);
-            stats.remoteScanTime = Date.now() - remoteStart;
-            stats.fileCounts.remote = Object.keys(remoteFiles).length;
-            stats.fileCounts.local = Object.keys(localFiles).length;
+
+            stats.remoteScanTime = remoteFiles.end - remoteStart;
+            stats.localScanTime = localFiles.end - localStart;
+            stats.fileCounts.remote = Object.keys(remoteFiles.files).length;
+            stats.fileCounts.local = Object.keys(localFiles.files).length;
 
             // Update hash statistics from checksum
             if (this.plugin.hashStats && this.plugin.hashStats.local) {
@@ -351,9 +352,9 @@ export class Operations {
 
             // Compare file trees
             const compareStart = Date.now();
-            this.plugin.allFiles.local = localFiles;
-            this.plugin.allFiles.remote = remoteFiles;
-            this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remoteFiles, localFiles);
+            this.plugin.allFiles.local = localFiles.files;
+            this.plugin.allFiles.remote = remoteFiles.files;
+            this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
             stats.compareTime = Date.now() - compareStart;
 
             const ok = this.dangerCheck();
@@ -407,6 +408,46 @@ export class Operations {
             response ? this.plugin.setStatus(Status.ERROR) : this.plugin.setStatus(Status.OFFLINE);
             throw error;
         }
+    }
+
+    /**
+     * Apply explicit user actions for conflict resolution
+     * Moves files from 'except' to appropriate category based on user choice
+     */
+    private applyExplicitActions(fileTrees: FileTrees): void {
+        const explicitActions = this.plugin.fileExplicitActions;
+        if (!explicitActions || explicitActions.size === 0) {
+            return;
+        }
+
+        // Track processed actions to clear them
+        const processedPaths: string[] = [];
+
+        explicitActions.forEach((action, path) => {
+            // Only process if the file is still in 'except' (conflict)
+            if (fileTrees.localFiles.except[path] && fileTrees.remoteFiles.except[path]) {
+                const hash = fileTrees.localFiles.except[path];
+
+                if (action === "push") {
+                    // Keep local version: move from except to localFiles.modified
+                    fileTrees.localFiles.modified[path] = hash;
+                    delete fileTrees.localFiles.except[path];
+                    delete fileTrees.remoteFiles.except[path];
+                    this.plugin.log(`[Explicit Action] PUSH (keep local): ${path}`);
+                } else if (action === "pull") {
+                    // Keep remote version: move from except to remoteFiles.modified
+                    fileTrees.remoteFiles.modified[path] = hash;
+                    delete fileTrees.localFiles.except[path];
+                    delete fileTrees.remoteFiles.except[path];
+                    this.plugin.log(`[Explicit Action] PULL (keep remote): ${path}`);
+                }
+
+                processedPaths.push(path);
+            }
+        });
+
+        // Clear processed actions
+        processedPaths.forEach((path) => explicitActions.delete(path));
     }
 
     /**
@@ -485,6 +526,9 @@ export class Operations {
             }
 
             this.plugin.setStatus(Status.SYNC);
+
+            // Handle explicit conflict actions before filtering
+            this.applyExplicitActions(this.plugin.fileTrees);
 
             // Filter fileTrees to only include selected files
             const fileTreesSelected = this.filterSelectedFiles(this.plugin.fileTrees);

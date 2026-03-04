@@ -15,6 +15,7 @@ interface ConcurrencyProcessor {
 
 export class Checksum {
     allLocalFiles: FileList = {};
+    hashDurations: Record<string, number> = {};
 
     constructor(public plugin: SmartSyncPlugin) {
         this.plugin = plugin;
@@ -64,9 +65,10 @@ export class Checksum {
                 if (exclude && this.isExcluded(file)) {
                     return;
                 }
-
+                const start = Date.now();
                 const data = await this.plugin.app.vault.adapter.readBinary(file);
                 this.allLocalFiles[file] = await sha256(data);
+                this.hashDurations[file] = Date.now() - start;
             } catch (error) {
                 console.error(`Error processing file ${file}:`, error);
             }
@@ -101,7 +103,7 @@ export class Checksum {
      * @async
      * @function generateLocalHashTree
      */
-    generateLocalHashTree = async (exclude: boolean) => {
+    generateLocalHashTree = async (exclude: boolean): Promise<{ files: FileList; end: number }> => {
         this.allLocalFiles = {};
 
         const localTFiles: TAbstractFile[] = this.plugin.app.vault.getAllLoadedFiles();
@@ -109,6 +111,7 @@ export class Checksum {
         //@ts-ignore little trick
         const fileCache = this.plugin.app.metadataCache.fileCache;
 
+        this.plugin.log("=== FileCache ===");
         this.plugin.log(fileCache);
 
         // Initialize statistics for this run
@@ -142,9 +145,11 @@ export class Checksum {
                                 console.error("fileCache Error", element, error);
                             }
                         }
+                        const start = Date.now();
                         const content = await this.plugin.app.vault.readBinary(element);
                         this.allLocalFiles[filePath] = await sha256(content);
                         hashStats.calculatedHashes++;
+                        this.hashDurations[filePath] = Date.now() - start;
                         return;
                     } else if (element instanceof TFolder) {
                         const filePath = element.path + "/";
@@ -178,12 +183,13 @@ export class Checksum {
         this.plugin.hashStats.local = hashStats;
 
         this.plugin.log(`LOCAL HASH STATISTICS: ${JSON.stringify(hashStats, null, 2)}`);
+        this.plugin.log(this.hashDurations);
 
         if (exclude) {
             this.plugin.localFiles = this.allLocalFiles;
         }
 
-        return this.allLocalFiles;
+        return { files: this.allLocalFiles, end: Date.now() };
     };
 
     /**
@@ -191,7 +197,7 @@ export class Checksum {
      * @param smartSyncClient - The SmartSync client instance
      * @returns Hash tree of remote files
      */
-    generateRemoteHashTree = async (smartSyncClient: SmartSyncClient): Promise<FileList> => {
+    generateRemoteHashTree = async (smartSyncClient: SmartSyncClient): Promise<{ files: FileList; end: number }> => {
         try {
             // Check if server is online
             const status = await smartSyncClient.getStatus();
@@ -218,7 +224,7 @@ export class Checksum {
 
             this.plugin.remoteFiles = remoteHashTree;
 
-            return remoteHashTree;
+            return { files: remoteHashTree, end: Date.now() };
         } catch (error) {
             console.error("Error:", error);
             throw error;

@@ -107,6 +107,8 @@ export type Hash = string;
 export type Location = "remoteFiles" | "localFiles";
 export type Type = "added" | "deleted" | "modified" | "except";
 
+export type ExplicitAction = "push" | "pull";
+
 export type FileList = Record<Path, Hash>;
 
 export type FileTree = {

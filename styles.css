@@ -181,11 +181,13 @@
     min-width: 0;
     font-family: var(--font-monospace);
     font-size: var(--font-ui-small);
+    user-select: text;
 }
 
 .smart-sync-file-icon {
     font-size: 16px;
     min-width: 20px;
+    user-select: none;
 }
 
 .smart-sync-path-dir {
@@ -194,6 +196,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    user-select: text;
 }
 
 .smart-sync-path-dir:hover {
@@ -208,6 +211,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: var(--font-medium);
+    user-select: text;
 }
 
 .smart-sync-path-file:hover {
