@@ -46,8 +46,8 @@
 .smart-sync-status-indicator {
     flex: 1;
     text-align: center;
-    font-size: var(--font-ui-medium);
-    font-weight: var(--font-semibold);
+    font-size: var(--font-ui-small);
+    font-weight: var(--font-medium);
 }
 
 .smart-sync-header-btn {

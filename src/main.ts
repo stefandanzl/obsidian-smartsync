@@ -1,4 +1,4 @@
-import { TFile, TAbstractFile, Notice, Plugin, setIcon } from "obsidian";
+import { TFile, TAbstractFile, Notice, Plugin, setIcon, normalizePath } from "obsidian";
 import { SmartSyncClient } from "./smartSync";
 import {} from "./settings";
 import { FileTreeModal } from "./modal";
@@ -183,21 +183,25 @@ export default class SmartSync extends Plugin {
             return;
         }
         if (abstractFile instanceof TFile) {
-            // const now = Date.now();
-            // const minInterval = this.connectionError ? 20000 : 5000;
+            const filePath = abstractFile.path;
+            const now = Date.now();
+            const minInterval = 2000;
 
-            // if (now - this.lastModSync < minInterval) {
-            //     return;
-            // }
+            // Skip if this file was just synced (prevents infinite loop on Android
+            // when savePrevData() triggers additional modify events)
+            if (this.lastFileEdited === filePath && this.lastModSync && now - this.lastModSync < minInterval) {
+                this.log(`Skipping mod sync for ${filePath} - just synced ${now - this.lastModSync}ms ago`);
+                return;
+            }
 
             if (this.status === Status.NONE || this.status === Status.OFFLINE) {
+                this.lastFileEdited = filePath;
                 this.lastModSync = Date.now();
 
                 this.setStatus(Status.AUTO);
 
                 try {
                     const file: TFile = abstractFile;
-                    const filePath: string = file.path;
 
                     const timeoutId = this.modSyncTimeouts[filePath];
                     if (timeoutId) {
@@ -209,8 +213,16 @@ export default class SmartSync extends Plugin {
                     const data = await this.app.vault.readBinary(file);
                     const hash = await sha256(data);
 
-                    const remoteFilePath = join(this.baseRemotePath, filePath);
-                    const response = await this.smartSyncClient.uploadFile(remoteFilePath, data);
+                    // const remoteFilePath = join(this.baseRemotePath, filePath);
+
+                    const fileContent = await this.app.vault.adapter.readBinary(normalizePath(filePath));
+
+                    const response = await this.smartSyncClient.uploadFile(filePath, fileContent);
+
+                    // const response = await this.smartSyncClient.uploadFile(remoteFilePath, data);
+                    const last20 = new TextDecoder().decode(data.slice(-20));
+                    this.log("modSync data last 20 chars:", last20);
+                    this.log("modSync path: ", filePath, response);
                     if (!response) {
                         this.setStatus(Status.OFFLINE);
                         this.renewModSyncTimeout(abstractFile);
@@ -237,7 +249,6 @@ export default class SmartSync extends Plugin {
         if (!this.modifyHandlerRef) {
             this.modifyHandlerRef = (file: TAbstractFile) => {
                 if (file instanceof TFile) {
-                    this.lastFileEdited = file.path;
                     this.modSyncCallback(file);
                 }
             };
