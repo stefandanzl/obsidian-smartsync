@@ -210,18 +210,16 @@ export default class SmartSync extends Plugin {
                     }
 
                     this.log(filePath);
-                    const data = await this.app.vault.readBinary(file);
-                    const hash = await sha256(data);
+                    const fileContent = await this.app.vault.adapter.readBinary(normalizePath(filePath));
+                    // const data = await this.app.vault.readBinary(file);
+                    // const hash = await sha256(data);
+                    const hash = await sha256(fileContent);
 
                     // const remoteFilePath = join(this.baseRemotePath, filePath);
-
-                    const fileContent = await this.app.vault.adapter.readBinary(normalizePath(filePath));
 
                     const response = await this.smartSyncClient.uploadFile(filePath, fileContent);
 
                     // const response = await this.smartSyncClient.uploadFile(remoteFilePath, data);
-                    const last20 = new TextDecoder().decode(data.slice(-20));
-                    this.log("modSync data last 20 chars:", last20);
                     this.log("modSync path: ", filePath, response);
                     if (!response) {
                         this.setStatus(Status.OFFLINE);
