@@ -246,16 +246,19 @@ export class Operations {
         }
     }
 
-    async test(show = true) {
+    async test(show = true, verbose = false) {
+        if (this.plugin.status === Status.TEST) {
+            return;
+        }
         try {
             show && this.plugin.setStatus(Status.TEST);
-            show && this.plugin.show(`${Status.TEST} Testing ...`);
+            verbose && this.plugin.show(`${Status.TEST} Testing ...`);
 
             const status = await this.plugin.smartSyncClient.getStatus();
 
             // Check if online field exists and is true
             if (status && status.online === true) {
-                show && this.plugin.show("Connection successful");
+                verbose && this.plugin.show("Connection successful");
                 // ALWAYS set status to NONE after successful test, regardless of show parameter
                 show && this.plugin.setStatus(Status.NONE);
 

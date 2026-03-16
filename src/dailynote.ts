@@ -166,8 +166,11 @@ export class DailyNoteManager {
 
             // Quick connection test
             // const connected = await this.establishConnection();
-            const connected = await this.plugin.operations.test(false);
+            const connected = await this.plugin.operations.test(true, false);
             if (!connected) {
+                if (this.plugin.dailyOfflineModal) {
+                    return;
+                }
                 // Show modal instead of auto-retry
                 this.plugin.dailyOfflineModal = new DailyOfflineModal(this.plugin.app, this.plugin, { middleClick });
                 this.plugin.dailyOfflineModal.open();

@@ -68,7 +68,7 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                 button
                     .onClick(async () => {
                         this.plugin.setClient();
-                        button.setButtonText((await this.plugin.operations.test(true)) ? "OK" : "FAIL");
+                        button.setButtonText((await this.plugin.operations.test(true, true)) ? "OK" : "FAIL");
                     })
                     .setButtonText(this.plugin.prevData.error ? "FAIL" : "OK")
             );
