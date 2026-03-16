@@ -196,7 +196,17 @@ export default class SmartSync extends Plugin {
                 return;
             }
 
-            if (this.status === Status.NONE || this.status === Status.OFFLINE) {
+            if (this.status === Status.OFFLINE) {
+                const online = await this.operations.test(false, false);
+
+                if (online) {
+                    this.setStatus(Status.NONE);
+                } else {
+                    return;
+                }
+            }
+
+            if (this.status === Status.NONE) {
                 this.lastFileEdited = filePath;
                 this.lastModSync = Date.now();
 
