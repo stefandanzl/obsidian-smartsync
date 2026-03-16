@@ -1,14 +1,12 @@
 import { TFile, moment, normalizePath } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { createFolderIfNotExists, logNotice } from "./util";
-import { Status, STATUS_ITEMS } from "./const";
+import { Status } from "./const";
+import { DailyOfflineModal } from "./dailyModal";
 
 export class DailyNoteManager {
-    private ignoreConnection: boolean; //currently unused
-
     constructor(private plugin: SmartSyncPlugin) {
         this.plugin = plugin;
-        this.ignoreConnection = false; //set statically
     }
 
     /**
@@ -126,83 +124,6 @@ export class DailyNoteManager {
     }
 
     /**
-     * Establishes connection with retry logic
-     */
-    private async establishConnection(): Promise<boolean> {
-        const maxRetries = 5;
-        const timeout = 2000; // 500ms timeout
-        let retryCount = 0;
-        let connected = false;
-
-        while (retryCount < maxRetries && !connected) {
-            try {
-                connected = await Promise.race([
-                    this.plugin.smartSyncClient.getStatus().then((status) => status.online),
-                    new Promise<never>((_resolve, reject) => {
-                        setTimeout(() => reject(new Error("Connection timeout")), timeout);
-                    }),
-                ]);
-
-                if (connected) break;
-            } catch (error) {
-                console.log(`Connection attempt ${retryCount + 1} failed: ${error}`);
-            }
-            retryCount++;
-            logNotice(`Connection attempt ${retryCount}/${maxRetries} failed ⌛`, 1800);
-
-            if (retryCount <= maxRetries && !connected) {
-                await new Promise((resolve) => setTimeout(resolve, timeout));
-            }
-        }
-
-        return !!connected;
-    }
-
-    /**
-     * Handles offline status checks and existing file opening
-     */
-    private async handleOfflineStatus(middleClick: boolean): Promise<boolean> {
-        const folder = this.plugin.settings.dailyNotesFolder;
-        const format = this.plugin.settings.dailyNotesFormat;
-        const { filePath } = this.getDailyNotePath(folder, format);
-
-        // Check if daily note already exists locally
-        const existingFile = this.plugin.app.vault.getAbstractFileByPath(filePath);
-        if (existingFile instanceof TFile) {
-            logNotice("Opening existing daily note\nCurrently not online ");
-            await this.plugin.app.workspace.getLeaf(middleClick).openFile(existingFile);
-            return true; // Handled offline case
-        } else {
-            logNotice("Cant use Daily Notes feature: Status must be " + Status.NONE);
-            return true; // Can't proceed
-        }
-    }
-
-    /**
-     * Handles connection failure by checking for existing local file
-     */
-    private async handleConnectionFailure(middleClick: boolean): Promise<boolean> {
-        const folder = this.plugin.settings.dailyNotesFolder;
-        const format = this.plugin.settings.dailyNotesFormat;
-        const { filePath } = this.getDailyNotePath(folder, format);
-
-        const existingFile = this.plugin.app.vault.getAbstractFileByPath(filePath);
-        if (existingFile instanceof TFile) {
-            logNotice(
-                "Opening existing daily note\nCurrently NO INTERNET CONNECTION!🚩\nContent could be older than remote!\nMERGE CONTENT MANUALLY!",
-                8000
-            );
-
-            await this.plugin.app.workspace.getLeaf(middleClick).openFile(existingFile);
-            return true; // Handled with existing file
-        } else {
-            logNotice("No internet connection.\nClick Daily Notes again to FORCE new note without connecting to server.", 8000);
-            this.ignoreConnection = true;
-            return true; // Can't proceed
-        }
-    }
-
-    /**
      * Opens the daily note and adds timestamp if configured
      */
     private async openNoteWithTimestamp(file: TFile, middleClick: boolean, usedTemplate?: boolean): Promise<void> {
@@ -234,35 +155,25 @@ export class DailyNoteManager {
             // Handle offline scenarios
             if (this.plugin.status === Status.ERROR) {
                 logNotice("Error detected! ❌\nClear error in SmartSync control modal and try to get Daily Note again!");
-                // this.plugin.show(this.plugin.message, 5000);
                 return;
             }
 
-            if (!this.ignoreConnection) {
-                if (this.plugin.status !== Status.NONE && this.plugin.status !== Status.OFFLINE) {
-                    const waitTime = 3;
-                    logNotice(
-                        `SmartSync plugin currently busy with ${STATUS_ITEMS[this.plugin.status].label} ${this.plugin.status}!\nTrying automatically again in ${waitTime} seconds ...`,
-                        1000 * waitTime
-                    );
-                    await sleep(1000 * waitTime);
-                    //@ts-ignore
-                    if (this.plugin.status !== Status.NONE) {
-                        this.plugin.show(
-                            `SmartSync plugin currently busy with ${STATUS_ITEMS[this.plugin.status].label} ${this.plugin.status}!\nTry again later - check statusbar icon for info!`
-                        );
-                        return;
-                    }
-                }
-                const connected = await this.establishConnection();
-                if (!connected) {
-                    if (await this.handleConnectionFailure(middleClick)) {
-                        return;
-                    }
-                }
+            // Check if modal is already open - if so, don't create another
+            if (this.plugin.dailyOfflineModal) {
+                logNotice("Daily note modal already open - please use the modal options");
+                return;
             }
 
-            this.ignoreConnection = false;
+            // Quick connection test
+            // const connected = await this.establishConnection();
+            const connected = await this.plugin.operations.test(false);
+            if (!connected) {
+                // Show modal instead of auto-retry
+                this.plugin.dailyOfflineModal = new DailyOfflineModal(this.plugin.app, this.plugin, { middleClick });
+                this.plugin.dailyOfflineModal.open();
+                return;
+            }
+
             const { filePath, folderPath } = this.getDailyNotePathInfo();
 
             await createFolderIfNotExists(this.plugin.app.vault, folderPath);

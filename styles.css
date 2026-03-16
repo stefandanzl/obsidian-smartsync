@@ -587,3 +587,104 @@
     min-width: 45%;
     flex: 1;
 }
+
+/* ============= DAILY OFFLINE MODAL ============= */
+.smart-sync-daily-modal {
+    width: 450px;
+    max-width: 90vw;
+}
+
+.smart-sync-modal-status {
+    padding: 16px 0;
+    text-align: center;
+}
+
+.smart-sync-modal-status p {
+    margin: 0;
+    font-size: var(--font-ui-medium);
+    color: var(--text-normal);
+}
+
+.smart-sync-file-info {
+    padding: 12px 20px;
+    margin: 12px 0;
+    background: var(--background-modifier-subtle);
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.smart-sync-file-info p {
+    margin: 4px 0;
+    font-size: var(--font-ui-small);
+    color: var(--text-muted);
+}
+
+.smart-sync-file-exists {
+    color: var(--color-green) !important;
+}
+
+.smart-sync-file-missing {
+    color: var(--color-orange) !important;
+}
+
+.smart-sync-modal-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 0;
+}
+
+.smart-sync-modal-btn-primary,
+.smart-sync-modal-btn-secondary,
+.smart-sync-modal-btn-cancel {
+    width: 100%;
+    padding: 12px 20px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    font-size: var(--font-ui-medium);
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.smart-sync-modal-btn-primary {
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.smart-sync-modal-btn-primary:hover {
+    background: var(--interactive-accent-hover);
+    border-color: var(--interactive-accent-hover);
+}
+
+.smart-sync-modal-btn-secondary {
+    background: var(--interactive-normal);
+    color: var(--text-normal);
+}
+
+.smart-sync-modal-btn-secondary:hover {
+    background: var(--interactive-hover);
+}
+
+.smart-sync-modal-btn-cancel {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: var(--background-modifier-border-hover);
+}
+
+.smart-sync-modal-btn-cancel:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.smart-sync-modal-footer {
+    margin-top: 16px;
+    padding: 12px;
+    text-align: center;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+    background: var(--background-modifier-subtle);
+    border-radius: 6px;
+}

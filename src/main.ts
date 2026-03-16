@@ -21,6 +21,7 @@ import {
     ExplicitAction,
 } from "./const";
 import { DailyNoteManager } from "./dailynote";
+import { DailyOfflineModal } from "./dailyModal";
 
 export default class SmartSync extends Plugin {
     message: string | Array<string[]> | string[] | unknown[];
@@ -38,6 +39,7 @@ export default class SmartSync extends Plugin {
     statusBar2: HTMLElement;
     iconSpan: HTMLSpanElement;
     modal: FileTreeModal;
+    dailyOfflineModal: DailyOfflineModal | null = null;
     baseRemotePath: string = "";
     showModal: boolean;
     smartSyncClient: SmartSyncClient;

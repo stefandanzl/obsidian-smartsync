@@ -99,6 +99,7 @@ export class FileTreeModal extends Modal {
             title: "Maintenance",
         });
         this.createDropdown(maintenanceBtn, [
+            { label: "🔌 Test Connection", action: () => this.plugin.operations.test(true) },
             { label: "❌ Clear Error States", action: () => this.clearErrors() },
             { label: "💾 Save Vault State", action: () => this.plugin.saveState() },
             { label: "⚙️ SmartSync Settings", action: () => this.openSettings() },
