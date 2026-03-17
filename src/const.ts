@@ -40,7 +40,7 @@ export const STATUS_ITEMS: Record<Status, StatusItem> = {
     [Status.TEST]: {
         emoji: "🧪",
         class: "status-test",
-        lucide: "flask",
+        lucide: "test-tube-diagonal",
         label: "Testing server connection ...",
         color: "#0000FF",
     },
