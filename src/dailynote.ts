@@ -127,7 +127,8 @@ export class DailyNoteManager {
      * Opens the daily note and adds timestamp if configured
      */
     private async openNoteWithTimestamp(file: TFile, middleClick: boolean, usedTemplate?: boolean): Promise<void> {
-        await this.plugin.app.workspace.getLeaf(middleClick).openFile(file);
+        const leaf = this.plugin.app.workspace.getLeaf(middleClick);
+        await leaf.openFile(file);
 
         const editor = this.plugin.app.workspace.activeEditor?.editor;
 
@@ -138,6 +139,18 @@ export class DailyNoteManager {
             lastLine = editor.lastLine();
             const lastLineLength = editor.getLine(lastLine).length;
             editor.setCursor({ line: lastLine, ch: lastLineLength });
+
+            //@ts-ignore not-in-API
+            editor.addHighlights(
+                [
+                    {
+                        from: { line: lastLine, ch: 0 },
+                        to: { line: lastLine, ch: 5 },
+                    },
+                ],
+                "is-flashing",
+                true
+            );
         }
     }
 
