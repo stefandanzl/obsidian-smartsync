@@ -56,6 +56,8 @@ export default class SmartSync extends Plugin {
     lastFileEdited: string;
     lastModSync: number;
     modSyncTimeouts: Record<string, NodeJS.Timeout | null> = {};
+    modSyncLockTimes: Record<string, number> = {};
+    modSyncConnAttempt: number = 0;
     modifyHandlerRef: ((file: TAbstractFile) => void) | null = null;
 
     notice: Notice;
@@ -162,15 +164,20 @@ export default class SmartSync extends Plugin {
         }
     }
 
-    async renewModSyncTimeout(abstractFile: TFile, attempt = 0) {
+    async renewModSyncTimeout(abstractFile: TFile) {
         const filePath: string = abstractFile.path;
+        const now = Date.now();
         const timeoutId = this.modSyncTimeouts[filePath];
+        // const attempt = this.modSyncAttempts[filePath];
+        const attempt = this.modSyncConnAttempt;
         if (timeoutId) {
             clearTimeout(timeoutId);
             delete this.modSyncTimeouts[filePath];
         }
 
         const delay = Math.min(10000 * Math.pow(1.5, attempt), 60000); // Cap at 1 minute
+
+        this.modSyncLockTimes[filePath] = now + delay;
 
         this.modSyncTimeouts[filePath] = setTimeout(() => {
             this.log(`Mod Sync: ${delay / 1000} seconds have passed`);
@@ -180,6 +187,9 @@ export default class SmartSync extends Plugin {
 
     async modSyncCallback(abstractFile: TAbstractFile) {
         this.log("modSync outer");
+        this.log(this.modSyncTimeouts);
+        this.log(this.modSyncConnAttempt);
+        this.log(this.modSyncLockTimes);
         if (this.isSyncing) {
             this.log("Skipping mod sync during sync operation");
             return;
@@ -187,11 +197,15 @@ export default class SmartSync extends Plugin {
         if (abstractFile instanceof TFile) {
             const filePath = abstractFile.path;
             const now = Date.now();
-            const minInterval = 2000;
+            const minInterval = 5000;
 
-            // Skip if this file was just synced (prevents infinite loop on Android
-            // when savePrevData() triggers additional modify events)
+            if (filePath in this.modSyncLockTimes && this.modSyncLockTimes[filePath] > now) {
+                this.log("File not yet allowed because timeout is still waiting");
+                return;
+            }
             if (this.lastFileEdited === filePath && this.lastModSync && now - this.lastModSync < minInterval) {
+                // Skip if this file was just synced (prevents infinite loop on Android
+                // when savePrevData() triggers additional modify events)
                 this.log(`Skipping mod sync for ${filePath} - just synced ${now - this.lastModSync}ms ago`);
                 return;
             }
@@ -201,7 +215,11 @@ export default class SmartSync extends Plugin {
 
                 if (online) {
                     this.setStatus(Status.NONE);
+                    this.modSyncConnAttempt = 0;
+                    // delete this.modSyncLockTimes[filePath];
                 } else {
+                    this.modSyncConnAttempt = this.modSyncConnAttempt + 1;
+                    this.renewModSyncTimeout(abstractFile);
                     return;
                 }
             }
@@ -235,6 +253,7 @@ export default class SmartSync extends Plugin {
                     this.log("modSync path: ", filePath, response);
                     if (!response) {
                         this.setStatus(Status.OFFLINE);
+                        this.modSyncConnAttempt = this.modSyncConnAttempt + 1;
                         this.renewModSyncTimeout(abstractFile);
                         return;
                     }
@@ -250,6 +269,7 @@ export default class SmartSync extends Plugin {
                     this.setStatus(Status.ERROR);
                 }
             } else {
+                this.modSyncConnAttempt = this.modSyncConnAttempt + 1;
                 this.renewModSyncTimeout(abstractFile);
             }
         }

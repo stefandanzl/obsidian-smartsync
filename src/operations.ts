@@ -257,7 +257,7 @@ export class Operations {
             show && this.plugin.setStatus(Status.TEST);
             verbose && this.plugin.show(`${Status.TEST} Testing ...`);
 
-            const status = await this.plugin.smartSyncClient.establishConnection();
+            const status = await this.plugin.smartSyncClient.establishConnection(show);
 
             // Check if online field exists and is true
             if (status) {

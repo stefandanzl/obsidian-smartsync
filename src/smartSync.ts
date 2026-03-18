@@ -219,7 +219,7 @@ export class SmartSyncClient {
     /**
      * Establishes connection with retry logic
      */
-    async establishConnection(): Promise<boolean> {
+    async establishConnection(show = true): Promise<boolean> {
         const maxRetries = 2;
         const timeout = 500; // 500ms timeout
         let retryCount = 0;
@@ -236,10 +236,10 @@ export class SmartSyncClient {
 
                 if (connected) break;
             } catch (error) {
-                console.log(`Connection attempt ${retryCount + 1} failed: ${error}`);
+                show && console.log(`Connection attempt ${retryCount + 1} failed: ${error}`);
             }
             retryCount++;
-            new Notice(`Connection attempt ${retryCount}/${maxRetries} failed ⌛`, 1800);
+            show && new Notice(`Connection attempt ${retryCount}/${maxRetries} failed ⌛`, 1800);
 
             if (retryCount <= maxRetries && !connected) {
                 await new Promise((resolve) => setTimeout(resolve, timeout));
