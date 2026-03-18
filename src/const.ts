@@ -42,7 +42,7 @@ export const STATUS_ITEMS: Record<Status, StatusItem> = {
         class: "status-test",
         lucide: "test-tube-diagonal",
         label: "Testing server connection ...",
-        color: "#0000FF",
+        color: "#00c3ff",
     },
     [Status.SAVE]: {
         emoji: "💾",
@@ -70,14 +70,14 @@ export const STATUS_ITEMS: Record<Status, StatusItem> = {
         class: "status-offline",
         lucide: "wifi-off",
         label: "Offline! Can't connect to server!",
-        color: "#FF0000",
+        color: "#dd4747",
     },
     [Status.ERROR]: {
         emoji: "❌",
         class: "status-error",
         lucide: "refresh-cw-off",
         label: "Error! Please check Console in DevTools!",
-        color: "#FF0000",
+        color: "#e94e4e",
     },
     [Status.PULL]: {
         emoji: "🔻",

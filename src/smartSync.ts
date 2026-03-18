@@ -1,4 +1,5 @@
-import { requestUrl, RequestUrlResponse } from "obsidian";
+import { Notice, requestUrl, RequestUrlResponse } from "obsidian";
+import SmartSync from "./main";
 
 export const SMARTSYNC_HEADERS = { "Cache-Control": "no-cache, no-store, must-revalidate" };
 
@@ -35,12 +36,14 @@ export class SmartSyncClient {
     private port: number;
     private authToken?: string;
     private headers: string | object | undefined;
+    plugin: SmartSync;
 
-    constructor(config: SmartSyncConfig) {
+    constructor(config: SmartSyncConfig, plugin: SmartSync) {
         this.serverUrl = config.serverUrl.replace(/\/$/, ""); // Remove trailing slash
         this.port = config.port;
         this.authToken = config.authToken;
         this.headers = { ...SMARTSYNC_HEADERS };
+        this.plugin = plugin;
     }
 
     private createAuthHeader(): string | undefined {
@@ -79,7 +82,7 @@ export class SmartSyncClient {
             }
             return response.json;
         } catch (error) {
-            console.error("SmartSync getStatus error:", error);
+            // console.error("SmartSync getStatus error:", error);
             return { online: false, file_count: 0 };
         }
     }
@@ -211,5 +214,38 @@ export class SmartSyncClient {
         } catch (error) {
             return false;
         }
+    }
+
+    /**
+     * Establishes connection with retry logic
+     */
+    async establishConnection(): Promise<boolean> {
+        const maxRetries = 2;
+        const timeout = 500; // 500ms timeout
+        let retryCount = 0;
+        let connected = false;
+
+        while (retryCount < maxRetries && !connected) {
+            try {
+                connected = await Promise.race([
+                    this.getStatus().then((status) => status.online),
+                    new Promise<never>((_resolve, reject) => {
+                        setTimeout(() => reject(new Error("Connection timeout")), timeout);
+                    }),
+                ]);
+
+                if (connected) break;
+            } catch (error) {
+                console.log(`Connection attempt ${retryCount + 1} failed: ${error}`);
+            }
+            retryCount++;
+            new Notice(`Connection attempt ${retryCount}/${maxRetries} failed ⌛`, 1800);
+
+            if (retryCount <= maxRetries && !connected) {
+                await new Promise((resolve) => setTimeout(resolve, timeout));
+            }
+        }
+
+        return !!connected;
     }
 }

@@ -138,19 +138,35 @@ export class DailyNoteManager {
             editor.setLine(lastLine, lastLineContent + `\n\n${moment().format("HH:mm")} - `);
             lastLine = editor.lastLine();
             const lastLineLength = editor.getLine(lastLine).length;
-            editor.setCursor({ line: lastLine, ch: lastLineLength });
+            // editor.setCursor({ line: lastLine, ch: lastLineLength });
+
+            //TEST
+            // lastLine = lastLine - 40;
 
             //@ts-ignore not-in-API
-            editor.addHighlights(
-                [
-                    {
-                        from: { line: lastLine, ch: 0 },
-                        to: { line: lastLine, ch: 5 },
-                    },
-                ],
-                "is-flashing",
-                true
-            );
+            // editor.addHighlights(
+            //     [
+            //         {
+            //             from: { line: lastLine, ch: 0 },
+            //             to: { line: lastLine, ch: 5 },
+            //         },
+            //     ],
+            //     "is-flashing",
+            //     true
+            // );
+
+            leaf.setEphemeralState({
+                line: lastLine,
+                // focus: true,
+                // match: {
+                //     // content: "",
+                //     matches: [[0, 5]],
+                // },
+            });
+
+            setTimeout(() => {
+                editor.setCursor({ line: lastLine, ch: lastLineLength });
+            }, 50);
         }
     }
 

@@ -17,11 +17,14 @@ export class Operations {
             throw new Error("Missing SmartSync URL");
         }
 
-        return new SmartSyncClient({
-            serverUrl: url,
-            port: port || 443,
-            authToken,
-        });
+        return new SmartSyncClient(
+            {
+                serverUrl: url,
+                port: port || 443,
+                authToken,
+            },
+            this.plugin
+        );
     }
 
     async downloadFiles(filesMap: FileList): Promise<void> {
@@ -254,10 +257,10 @@ export class Operations {
             show && this.plugin.setStatus(Status.TEST);
             verbose && this.plugin.show(`${Status.TEST} Testing ...`);
 
-            const status = await this.plugin.smartSyncClient.getStatus();
+            const status = await this.plugin.smartSyncClient.establishConnection();
 
             // Check if online field exists and is true
-            if (status && status.online === true) {
+            if (status) {
                 verbose && this.plugin.show("Connection successful");
                 // ALWAYS set status to NONE after successful test, regardless of show parameter
                 show && this.plugin.setStatus(Status.NONE);
@@ -268,7 +271,7 @@ export class Operations {
                 }
                 return true;
             }
-            console.log("[TEST] Connection failed, status.online:", status?.online);
+            console.log("[TEST] Connection failed");
             show && this.plugin.show("Connection failed: Server is offline");
             this.plugin.setStatus(Status.OFFLINE);
 

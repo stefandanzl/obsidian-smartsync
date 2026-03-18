@@ -116,8 +116,8 @@ export class DailyOfflineModal extends Modal {
         this.updateStatusFooter("Retrying...");
 
         try {
-            const status = await this.plugin.smartSyncClient.getStatus();
-            if (status && status.online) {
+            const status = await this.plugin.smartSyncClient.establishConnection();
+            if (status) {
                 // Connection successful - proceed with normal flow
                 this.close();
                 this.plugin.dailyNote.dailyNote(this.middleClick);
