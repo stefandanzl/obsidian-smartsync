@@ -568,7 +568,7 @@ export class FileTreeModal extends Modal {
         const items = [
             { label: "📂 Open in Explorer", action: () => this.openInExplorer(path) },
 
-            { label: "🔍 Show Diff", action: () => this.showDiff(path) },
+            { label: "🔍 Show Diff", action: () => this.showDiff(path, this.plugin.selectedFiles[path]?.location) },
         ];
         if (!path.startsWith(this.app.vault.configDir)) {
             items.unshift({ label: "📝 Open in Obsidian", action: () => this.openFile(path) });
@@ -675,8 +675,8 @@ export class FileTreeModal extends Modal {
         this.app.workspace.openLinkText(path, "", "tab");
     }
 
-    private showDiff(path: string) {
-        new DiffModal(this.app, this.plugin, path).open();
+    private showDiff(path: string, location: Location) {
+        new DiffModal(this.app, this.plugin, path, location).open();
     }
 
     onClose() {

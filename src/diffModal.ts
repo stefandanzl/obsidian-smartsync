@@ -2,18 +2,11 @@ import { App, Modal, Notice } from "obsidian";
 import { MergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import {
-    history,
-    indentWithTab,
-    standardKeymap,
-} from "@codemirror/commands";
-import {
-    highlightSelectionMatches,
-    search,
-    searchKeymap,
-} from "@codemirror/search";
+import { history, indentWithTab, standardKeymap } from "@codemirror/commands";
+import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { keymap, lineNumbers, drawSelection } from "@codemirror/view";
 import SmartSyncPlugin from "./main";
+import { Location } from "./const";
 
 export class DiffModal extends Modal {
     mergeView: MergeView | undefined;
@@ -22,7 +15,8 @@ export class DiffModal extends Modal {
     constructor(
         app: App,
         public plugin: SmartSyncPlugin,
-        public filePath: string
+        public filePath: string,
+        public location: Location
     ) {
         super(app);
     }
@@ -41,10 +35,7 @@ export class DiffModal extends Modal {
 
         try {
             // Fetch both local and remote content
-            const [localContent, remoteContent] = await Promise.all([
-                this.fetchLocalContent(),
-                this.fetchRemoteContent(),
-            ]);
+            const [localContent, remoteContent] = await Promise.all([this.fetchLocalContent(), this.fetchRemoteContent()]);
 
             this.loading = false;
             contentEl.empty();
@@ -83,9 +74,7 @@ export class DiffModal extends Modal {
 
     private async fetchRemoteContent(): Promise<string | null> {
         try {
-            const response = await this.plugin.smartSyncClient.getFile(
-                this.filePath
-            );
+            const response = await this.plugin.smartSyncClient.getFile(this.filePath);
             if (response.status === 200) {
                 // Convert ArrayBuffer to string
                 const decoder = new TextDecoder("utf-8");
@@ -100,18 +89,23 @@ export class DiffModal extends Modal {
 
     private createMergeView(localContent: string, remoteContent: string) {
         const { contentEl } = this;
+        // Determine label order based on location
+        const [leftLabel, rightLabel] =
+            this.location === "localFiles"
+                ? ["Remote", "Local"] // local is new → goes right
+                : ["Local", "Remote"]; // remote is new → goes right
 
         // Add header showing which side is which
         const header = contentEl.createDiv({
             cls: "smart-sync-diff-header",
         });
         header.createSpan({
-            cls: "smart-sync-diff-header-local",
-            text: "Local",
+            cls: "smart-sync-diff-header-left",
+            text: leftLabel,
         });
         header.createSpan({
-            cls: "smart-sync-diff-header-remote",
-            text: "Remote",
+            cls: "smart-sync-diff-header-right",
+            text: rightLabel,
         });
 
         // Basic extensions for both editors
@@ -151,6 +145,11 @@ export class DiffModal extends Modal {
             ],
         };
 
+        const [leftConfig, rightConfig] =
+            this.location === "localFiles"
+                ? [remoteConfig, localConfig] // local is new → goes right
+                : [localConfig, remoteConfig]; // remote is new → goes right
+
         // Create container for the merge view
         const mergeContainer = contentEl.createDiv({
             cls: "smart-sync-merge-view-container",
@@ -159,8 +158,8 @@ export class DiffModal extends Modal {
 
         // Create the MergeView
         this.mergeView = new MergeView({
-            a: remoteConfig, // Left side (remote)
-            b: localConfig, // Right side (local)
+            a: leftConfig, // Left side (local)
+            b: rightConfig, // Right side (remote)
             parent: mergeContainer,
             collapseUnchanged: {
                 minSize: 6,

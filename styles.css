@@ -553,17 +553,17 @@
     font-weight: var(--font-semibold);
 }
 
-.smart-sync-diff-header-remote,
-.smart-sync-diff-header-local {
+.smart-sync-diff-header-right,
+.smart-sync-diff-header-left {
     flex: 1;
     text-align: center;
 }
 
-.smart-sync-diff-header-remote {
+.smart-sync-diff-header-right {
     color: var(--text-accent);
 }
 
-.smart-sync-diff-header-local {
+.smart-sync-diff-header-left {
     color: var(--color-green);
 }
 
