@@ -1,4 +1,4 @@
-import { TFile, TAbstractFile, Notice, Plugin, setIcon, normalizePath } from "obsidian";
+import { TFile, TAbstractFile, Notice, Plugin, setIcon, normalizePath, debounce } from "obsidian";
 import { SmartSyncClient } from "./smartSync";
 import {} from "./settings";
 import { FileTreeModal } from "./modal";
@@ -55,8 +55,8 @@ export default class SmartSync extends Plugin {
     status: Status;
     lastFileEdited: string;
     lastModSync: number;
-    modSyncTimeouts: Record<string, NodeJS.Timeout | null> = {};
-    modSyncLockTimes: Record<string, number> = {};
+    modSyncDebounceTimers: Record<string, NodeJS.Timeout> = {}; // Debounce for editing (fixed delay)
+    modSyncRetryTimers: Record<string, NodeJS.Timeout> = {}; // Retry for offline (exponential backoff)
     modSyncConnAttempt: number = 0;
     modifyHandlerRef: ((file: TAbstractFile) => void) | null = null;
 
@@ -164,113 +164,111 @@ export default class SmartSync extends Plugin {
         }
     }
 
-    async renewModSyncTimeout(abstractFile: TFile) {
-        const filePath: string = abstractFile.path;
-        const now = Date.now();
-        const timeoutId = this.modSyncTimeouts[filePath];
-        // const attempt = this.modSyncAttempts[filePath];
-        const attempt = this.modSyncConnAttempt;
-        if (timeoutId) {
-            clearTimeout(timeoutId);
-            delete this.modSyncTimeouts[filePath];
+    /**
+     * Debounce: Wait until editing stops, then sync once.
+     * Called on every file modify event - resets timer on each call.
+     */
+    debounceModSync(file: TFile) {
+        const filePath = file.path;
+
+        // If there's already a timer or sync in progress, skip
+        if (this.modSyncDebounceTimers[filePath]) {
+            return; // Timer exists - either waiting or syncing
         }
 
-        const delay = Math.min(10000 * Math.pow(1.5, attempt), 60000); // Cap at 1 minute
+        // Schedule sync after debounce delay
+        this.modSyncDebounceTimers[filePath] = setTimeout(() => {
+            // Timer fires - marker remains during sync, cleared after
+            this.modSyncCallback(file);
+            delete this.modSyncDebounceTimers[filePath];
+        }, 2000);
+    }
 
-        this.modSyncLockTimes[filePath] = now + delay;
+    /**
+     * Offline retry: Schedule retry with exponential backoff.
+     * Called when sync fails due to offline status.
+     */
+    scheduleOfflineRetry(file: TFile) {
+        const filePath = file.path;
+        const attempt = this.modSyncConnAttempt;
 
-        this.modSyncTimeouts[filePath] = setTimeout(() => {
-            this.log(`Mod Sync: ${delay / 1000} seconds have passed`);
-            this.modSyncCallback(abstractFile);
+        // Clear existing retry timer
+        if (this.modSyncRetryTimers[filePath]) {
+            clearTimeout(this.modSyncRetryTimers[filePath]);
+        }
+
+        // Exponential backoff: 10s * 1.5^attempt, capped at 60s
+        const delay = Math.min(10000 * Math.pow(1.5, attempt), 60000);
+        this.log(`Scheduling offline retry in ${delay / 1000}s (attempt ${attempt})`);
+
+        this.modSyncRetryTimers[filePath] = setTimeout(() => {
+            delete this.modSyncRetryTimers[filePath];
+            this.modSyncCallback(file);
         }, delay);
     }
 
     async modSyncCallback(abstractFile: TAbstractFile) {
-        this.log("modSync outer");
-        this.log(this.modSyncTimeouts);
-        this.log(this.modSyncConnAttempt);
-        this.log(this.modSyncLockTimes);
         if (this.isSyncing) {
             this.log("Skipping mod sync during sync operation");
             return;
         }
-        if (abstractFile instanceof TFile) {
-            const filePath = abstractFile.path;
-            const now = Date.now();
-            const minInterval = 5000;
 
-            if (filePath in this.modSyncLockTimes && this.modSyncLockTimes[filePath] > now) {
-                this.log("File not yet allowed because timeout is still waiting");
+        if (!(abstractFile instanceof TFile)) {
+            return;
+        }
+
+        const filePath = abstractFile.path;
+
+        // Check offline status and schedule retry if needed
+        if (this.status === Status.OFFLINE) {
+            const online = await this.operations.test(false, false);
+            if (online) {
+                this.setStatus(Status.NONE);
+                this.modSyncConnAttempt = 0;
+            } else {
+                this.scheduleOfflineRetry(abstractFile);
+                this.modSyncConnAttempt++;
                 return;
             }
-            if (this.lastFileEdited === filePath && this.lastModSync && now - this.lastModSync < minInterval) {
-                // Skip if this file was just synced (prevents infinite loop on Android
-                // when savePrevData() triggers additional modify events)
-                this.log(`Skipping mod sync for ${filePath} - just synced ${now - this.lastModSync}ms ago`);
-                return;
+        }
+
+        // Perform sync when online
+        if (this.status === Status.NONE) {
+            this.lastFileEdited = filePath;
+            this.lastModSync = Date.now();
+            this.setStatus(Status.AUTO);
+
+            // Clear any pending debounce timer (we're syncing now)
+            if (this.modSyncDebounceTimers[filePath]) {
+                clearTimeout(this.modSyncDebounceTimers[filePath]);
+                delete this.modSyncDebounceTimers[filePath];
             }
 
-            if (this.status === Status.OFFLINE) {
-                const online = await this.operations.test(false, false);
+            try {
+                this.log(filePath);
+                const fileContent = await this.app.vault.adapter.readBinary(normalizePath(filePath));
+                const hash = await sha256(fileContent);
+                const response = await this.smartSyncClient.uploadFile(filePath, fileContent);
 
-                if (online) {
-                    this.setStatus(Status.NONE);
-                    this.modSyncConnAttempt = 0;
-                    // delete this.modSyncLockTimes[filePath];
-                } else {
-                    this.modSyncConnAttempt = this.modSyncConnAttempt + 1;
-                    this.renewModSyncTimeout(abstractFile);
+                this.log("modSync path: ", filePath, response);
+
+                if (!response) {
+                    // Sync failed - schedule retry
+                    this.setStatus(Status.OFFLINE);
+                    this.scheduleOfflineRetry(abstractFile);
+                    this.modSyncConnAttempt++;
                     return;
                 }
-            }
 
-            if (this.status === Status.NONE) {
-                this.lastFileEdited = filePath;
-                this.lastModSync = Date.now();
-
-                this.setStatus(Status.AUTO);
-
-                try {
-                    const file: TFile = abstractFile;
-
-                    const timeoutId = this.modSyncTimeouts[filePath];
-                    if (timeoutId) {
-                        clearTimeout(timeoutId);
-                        delete this.modSyncTimeouts[filePath];
-                    }
-
-                    this.log(filePath);
-                    const fileContent = await this.app.vault.adapter.readBinary(normalizePath(filePath));
-                    // const data = await this.app.vault.readBinary(file);
-                    // const hash = await sha256(data);
-                    const hash = await sha256(fileContent);
-
-                    // const remoteFilePath = join(this.baseRemotePath, filePath);
-
-                    const response = await this.smartSyncClient.uploadFile(filePath, fileContent);
-
-                    // const response = await this.smartSyncClient.uploadFile(remoteFilePath, data);
-                    this.log("modSync path: ", filePath, response);
-                    if (!response) {
-                        this.setStatus(Status.OFFLINE);
-                        this.modSyncConnAttempt = this.modSyncConnAttempt + 1;
-                        this.renewModSyncTimeout(abstractFile);
-                        return;
-                    }
-
-                    this.prevData.files[filePath] = hash;
-                    this.savePrevData();
-
-                    this.setStatus(Status.NONE);
-                } catch (error) {
-                    console.log("ModSync Connectivity ERROR!");
-                    this.show("ModSync Error");
-                    this.lastModSync = Date.now();
-                    this.setStatus(Status.ERROR);
-                }
-            } else {
-                this.modSyncConnAttempt = this.modSyncConnAttempt + 1;
-                this.renewModSyncTimeout(abstractFile);
+                // Sync succeeded
+                this.prevData.files[filePath] = hash;
+                this.savePrevData();
+                this.setStatus(Status.NONE);
+                this.modSyncConnAttempt = 0;
+            } catch (error) {
+                console.log("ModSync Connectivity ERROR!", error);
+                this.show("ModSync Error");
+                this.setStatus(Status.ERROR);
             }
         }
     }
@@ -278,8 +276,9 @@ export default class SmartSync extends Plugin {
     setModSync() {
         if (!this.modifyHandlerRef) {
             this.modifyHandlerRef = (file: TAbstractFile) => {
-                if (file instanceof TFile) {
-                    this.modSyncCallback(file);
+                if (file instanceof TFile && file.path !== this.prevPath) {
+                    this.log(`Modify event for: ${file.path}, isSyncing: ${this.isSyncing}`);
+                    this.debounceModSync(file);
                 }
             };
         }
