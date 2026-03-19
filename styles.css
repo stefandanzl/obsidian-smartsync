@@ -231,6 +231,10 @@
     flex-shrink: 0;
 }
 
+.smart-sync-action-select.hidden {
+    display: none;
+}
+
 /* Menu Button */
 .smart-sync-menu-btn {
     font-size: 20px;

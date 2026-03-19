@@ -8,6 +8,8 @@ export class FileTreeModal extends Modal {
     fileTreeDiv: HTMLDivElement;
     dropdownContainer: HTMLDivElement;
     statusIndicator: HTMLSpanElement;
+    actionsVisible = false;
+    private toggleActionsItem?: HTMLButtonElement;
 
     constructor(
         app: App,
@@ -82,6 +84,11 @@ export class FileTreeModal extends Modal {
         });
         this.createDropdown(specialActionsBtn, [
             {
+                label: "Show Individual File Actions",
+                action: () => this.toggleActionSelects(),
+                updateLabel: (itemEl) => (this.toggleActionsItem = itemEl),
+            },
+            {
                 label: "📋 Replicate Local → Remote",
                 action: () => this.confirmAndRun("Replicate local on remote", () => this.plugin.operations.duplicateLocal()),
             },
@@ -92,6 +99,13 @@ export class FileTreeModal extends Modal {
             { label: "⬆️ Push Selected", action: () => this.confirmAndRun("Push selected files", () => this.pushSelected()) },
             { label: "⬇️ Pull Selected", action: () => this.confirmAndRun("Pull selected files", () => this.pullSelected()) },
         ]);
+
+        // // Toggle explicit action selects
+        // const toggleActionsBtn = header.createEl("button", {
+        //     text: "⚙️Show Actions",
+        //     cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
+        // });
+        // toggleActionsBtn.addEventListener("click", () => this.toggleActionSelects(toggleActionsBtn));
 
         // Maintenance Dropdown
         const maintenanceBtn = rightActions.createEl("button", {
@@ -218,7 +232,10 @@ export class FileTreeModal extends Modal {
         return paths;
     }
 
-    private createDropdown(button: HTMLButtonElement, items: { label: string; action: () => void }[]): void {
+    private createDropdown(
+        button: HTMLButtonElement,
+        items: { label: string; action: () => void; updateLabel?: (itemEl: HTMLButtonElement) => void }[]
+    ): void {
         const dropdown = document.createElement("div");
         dropdown.addClass("smart-sync-dropdown");
         this.dropdownContainer.appendChild(dropdown);
@@ -230,6 +247,9 @@ export class FileTreeModal extends Modal {
                 text: item.label,
                 cls: "smart-sync-dropdown-item",
             });
+            if (item.updateLabel) {
+                item.updateLabel(itemEl);
+            }
             itemEl.addEventListener("click", (e) => {
                 e.stopPropagation();
                 this.closeAllDropdowns();
@@ -325,6 +345,20 @@ export class FileTreeModal extends Modal {
 
     private togglePause() {
         this.plugin.togglePause();
+    }
+
+    private toggleActionSelects(btn?: HTMLButtonElement) {
+        this.actionsVisible = !this.actionsVisible;
+        this.fileTreeDiv.querySelectorAll(".smart-sync-action-select").forEach((el) => {
+            el.toggleClass("hidden", !this.actionsVisible);
+        });
+        const label = this.actionsVisible ? "Hide Individual Actions" : "Show Individual Actions";
+        if (btn) {
+            btn.textContent = this.actionsVisible ? "⚙️ Hide Actions" : "⚙️Show Actions";
+        }
+        if (this.toggleActionsItem) {
+            this.toggleActionsItem.textContent = label;
+        }
     }
 
     renderFileTrees() {
@@ -530,6 +564,7 @@ export class FileTreeModal extends Modal {
 
         // Conflict resolution dropdown
         const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
+        actionSelect.addClass("hidden");
         const blankOption = actionSelect.createEl("option", { value: "", text: "Choose action…" });
         actionSelect.createEl("option", { value: "push", text: "⬆️ Keep Local" });
         actionSelect.createEl("option", { value: "pull", text: "⬇️ Keep Remote" });
