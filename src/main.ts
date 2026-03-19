@@ -177,9 +177,9 @@ export default class SmartSync extends Plugin {
         }
 
         // Schedule sync after debounce delay
-        this.modSyncDebounceTimers[filePath] = setTimeout(() => {
+        this.modSyncDebounceTimers[filePath] = setTimeout(async () => {
             // Timer fires - marker remains during sync, cleared after
-            this.modSyncCallback(file);
+            await this.modSyncCallback(file);
             delete this.modSyncDebounceTimers[filePath];
         }, 2000);
     }
@@ -237,12 +237,6 @@ export default class SmartSync extends Plugin {
             this.lastFileEdited = filePath;
             this.lastModSync = Date.now();
             this.setStatus(Status.AUTO);
-
-            // Clear any pending debounce timer (we're syncing now)
-            if (this.modSyncDebounceTimers[filePath]) {
-                clearTimeout(this.modSyncDebounceTimers[filePath]);
-                delete this.modSyncDebounceTimers[filePath];
-            }
 
             try {
                 this.log(filePath);
