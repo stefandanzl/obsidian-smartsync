@@ -439,8 +439,7 @@ export class FileTreeModal extends Modal {
         const pathContainer = row.createDiv({ cls: "smart-sync-path-container" });
 
         // Icon
-        const icon = path.endsWith("/") ? "📁" : this.getFileIcon(path);
-        pathContainer.createSpan({ cls: "smart-sync-file-icon", text: icon });
+        if (!this.plugin.mobile) pathContainer.createSpan({ cls: "smart-sync-file-icon", text: this.getFileIcon(path) });
 
         // Split path into directory and filename
         const lastSlash = path.lastIndexOf("/");
@@ -460,6 +459,7 @@ export class FileTreeModal extends Modal {
 
         // Explicit action dropdown (now to the right of path)
         const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
+        actionSelect.addClass("hidden");
         const blankOption = actionSelect.createEl("option", { value: "", text: "" });
         actionSelect.createEl("option", { value: "push", text: "⬆️ Push" });
         actionSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
@@ -510,8 +510,7 @@ export class FileTreeModal extends Modal {
         // Conflict icon + File path
         const pathContainer = row.createDiv({ cls: "smart-sync-path-container" });
 
-        const icon = path.endsWith("/") ? "📁" : this.getFileIcon(path);
-        pathContainer.createSpan({ cls: "smart-sync-file-icon", text: icon });
+        if (!this.plugin.mobile) pathContainer.createSpan({ cls: "smart-sync-file-icon", text: this.getFileIcon(path) });
 
         // Split path into directory and filename
         const lastSlash = path.lastIndexOf("/");
@@ -597,6 +596,8 @@ export class FileTreeModal extends Modal {
     }
 
     private getFileIcon(path: string): string {
+        // if (this.plugin.mobile) return "";
+        if (path.endsWith("/")) return "📁";
         const ext = path.split(".").pop()?.toLowerCase();
         switch (ext) {
             case "md":
