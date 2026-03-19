@@ -46,8 +46,9 @@ export class FileTreeModal extends Modal {
             text: "🔄 Reload",
             cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
         });
-        reloadBtn.addEventListener("click", () => {
-            this.plugin.operations.check();
+        reloadBtn.addEventListener("click", async () => {
+            await this.plugin.operations.check();
+            this.updateSyncButton();
         });
 
         // ============= FILES AREA =============
@@ -115,9 +116,10 @@ export class FileTreeModal extends Modal {
 
         // Load and render files
         if (!this.plugin.fileTrees) {
-            this.plugin.operations.check();
+            this.plugin.operations.check().then(() => this.updateSyncButton());
         } else {
             this.renderFileTrees();
+            this.updateSyncButton();
         }
     }
 

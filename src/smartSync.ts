@@ -221,7 +221,7 @@ export class SmartSyncClient {
      */
     async establishConnection(show = true): Promise<boolean> {
         const maxRetries = 2;
-        const timeout = 500; // 500ms timeout
+        const timeout = 1000; // 500ms timeout
         let retryCount = 0;
         let connected = false;
 
