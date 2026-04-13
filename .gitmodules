@@ -1,0 +1,3 @@
+[submodule "smartsyncserver"]
+	path = smartsyncserver
+	url = https://github.com/stefandanzl/smartsyncserver
