@@ -124,11 +124,8 @@ export class DiffModal extends Modal {
             doc: remoteContent,
             extensions: [
                 ...basicExtensions,
-                EditorView.editable.of(false),
+                EditorView.editable.of(true),
                 EditorState.readOnly.of(true),
-                EditorView.theme({
-                    "&": { backgroundColor: "#1e1e1e" },
-                }),
             ],
         };
 
@@ -137,11 +134,8 @@ export class DiffModal extends Modal {
             doc: localContent,
             extensions: [
                 ...basicExtensions,
-                EditorView.editable.of(false),
+                EditorView.editable.of(true),
                 EditorState.readOnly.of(true),
-                EditorView.theme({
-                    "&": { backgroundColor: "#1e1e1e" },
-                }),
             ],
         };
 

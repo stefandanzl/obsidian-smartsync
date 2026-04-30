@@ -1,4 +1,4 @@
-import { TFile, moment, normalizePath } from "obsidian";
+import { Notice, TFile, WorkspaceLeaf, moment, normalizePath } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { createFolderIfNotExists, logNotice } from "./util";
 import { Status } from "./const";
@@ -127,15 +127,34 @@ export class DailyNoteManager {
      * Opens the daily note and adds timestamp if configured
      */
     private async openNoteWithTimestamp(file: TFile, middleClick: boolean, usedTemplate?: boolean): Promise<void> {
-        const leaf = this.plugin.app.workspace.getLeaf(middleClick);
-        await leaf.openFile(file);
+        let leaf: WorkspaceLeaf = undefined as unknown as WorkspaceLeaf; // this.plugin.app.workspace.getLeaf(middleClick);
+        if (!middleClick) {
+            const markdownLeaves = this.plugin.app.workspace.getLeavesOfType("markdown");
+            for (const l of markdownLeaves) {
+                //@ts-ignore no API
+                const path = l.view.getState()["file"] ?? "";
+                if (path && file.path === path) {
+                    leaf = l;
+                    console.log("found it");
+                    this.plugin.app.workspace.setActiveLeaf(leaf);
+                    break;
+                }
+            }
+        }
+        if (middleClick || !leaf) {
+            leaf = this.plugin.app.workspace.getLeaf(middleClick);
+            await leaf.openFile(file);
+        }
 
         const editor = this.plugin.app.workspace.activeEditor?.editor;
 
         if (editor && this.plugin.settings.dailyNotesTimestamp && usedTemplate !== true) {
             let lastLine = editor.lastLine();
             const lastLineContent = editor.getLine(lastLine);
-            editor.setLine(lastLine, lastLineContent + `\n\n${moment().format("HH:mm")} - `);
+            const newLineContent = `${moment().format("HH:mm")} - `;
+            if (lastLineContent !== newLineContent) {
+                editor.setLine(lastLine, lastLineContent + `\n\n` + newLineContent);
+            }
             lastLine = editor.lastLine();
             const lastLineLength = editor.getLine(lastLine).length;
             // editor.setCursor({ line: lastLine, ch: lastLineLength });
@@ -167,6 +186,18 @@ export class DailyNoteManager {
             setTimeout(() => {
                 editor.setCursor({ line: lastLine, ch: lastLineLength });
             }, 50);
+
+            function keydownCallback(ev: KeyboardEvent) {
+                leaf.setEphemeralState({
+                    match: {
+                        content: "",
+                        matches: [],
+                    },
+                });
+                removeEventListener("keydown", keydownCallback);
+            }
+
+            addEventListener("keydown", keydownCallback);
         }
     }
 

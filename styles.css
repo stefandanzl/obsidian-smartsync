@@ -592,6 +592,43 @@
     flex: 1;
 }
 
+/* Theme-aware MergeView styling */
+.smart-sync-merge-view-container .cm-editor {
+    background: var(--background-primary);
+    color: var(--text-normal);
+}
+
+.smart-sync-merge-view-container .cm-changedLine {
+    background: var(--background-modifier-hover);
+}
+
+.smart-sync-merge-view-container .cm-changedText {
+    background: rgba(var(--color-yellow-rgb), 0.25);
+}
+
+.smart-sync-merge-view-container .cm-deletedChunk {
+    background: rgba(var(--color-red-rgb), 0.15);
+}
+
+.smart-sync-merge-view-container .cm-insertedLine {
+    background: rgba(var(--color-green-rgb), 0.15);
+}
+
+.smart-sync-merge-view-container .cm-deletedLine {
+    background: rgba(var(--color-red-rgb), 0.15);
+}
+
+.smart-sync-merge-view-container .cm-gutters {
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    border-right: 1px solid var(--background-modifier-border);
+}
+
+.smart-sync-merge-view-container .cm-merge-revert button {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+}
+
 /* ============= DAILY OFFLINE MODAL ============= */
 .smart-sync-daily-modal {
     width: 450px;
