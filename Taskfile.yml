@@ -5,7 +5,8 @@ version: "3"
 vars:
     # VAULT: hirn
     # VAULTS_DIR: C:\PROJECTS\OBSIDIAN\
-    DIR_PLUGIN: "{{.VAULTS_DIR}}/{{.VAULT}}/.obsidian/plugins/smartsync"
+    PLUGIN: smartsync
+    DIR_PLUGIN: "{{.VAULTS_DIR}}/{{.VAULT}}/.obsidian/plugins/{{.PLUGIN}}"
 
     # USER_WORKING_DIR: C:\PROJECTS\Obsidian\{{.VAULT}}
     FILES: "main.js styles.css manifest.json"
@@ -32,7 +33,7 @@ tasks:
 
     reload:
         cmds:
-            - obsidian plugin:reload id=smartsync
+            - obsidian plugin:reload id={{.PLUGIN}}
 
     reload-obsidian:
         cmds:
