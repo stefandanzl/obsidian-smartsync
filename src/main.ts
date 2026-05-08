@@ -55,8 +55,8 @@ export default class SmartSync extends Plugin {
     status: Status;
     lastFileEdited: string;
     lastModSync: number;
-    modSyncDebounceTimers: Record<string, NodeJS.Timeout> = {}; // Debounce for editing (fixed delay)
-    modSyncRetryTimers: Record<string, NodeJS.Timeout> = {}; // Retry for offline (exponential backoff)
+    modSyncDebounceTimers: Record<string, ReturnType<typeof setTimeout>> = {}; // Debounce for editing (fixed delay)
+    modSyncRetryTimers: Record<string, ReturnType<typeof setTimeout>> = {}; // Retry for offline (exponential backoff)
     modSyncConnAttempt: number = 0;
     modifyHandlerRef: ((file: TAbstractFile) => void) | null = null;
 

@@ -91,6 +91,7 @@ export class DailyNoteManager {
      * Generates the daily note path based on format and folder
      */
     getDailyNotePath(folder: string, format: string) {
+        //@ts-ignore
         const momentDate = moment();
         const formattedDate = momentDate.format(format);
 
@@ -151,6 +152,7 @@ export class DailyNoteManager {
         if (editor && this.plugin.settings.dailyNotesTimestamp && usedTemplate !== true) {
             let lastLine = editor.lastLine();
             const lastLineContent = editor.getLine(lastLine);
+            //@ts-ignore
             const newLineContent = `${moment().format("HH:mm")} - `;
             if (lastLineContent !== newLineContent) {
                 editor.setLine(lastLine, lastLineContent + `\n\n` + newLineContent);

@@ -28,3 +28,5 @@ prevdata.json
 tests/exclude
 *.min.js
 .qodo
+
+meta.json
