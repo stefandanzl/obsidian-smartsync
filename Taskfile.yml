@@ -3,84 +3,111 @@
 version: "3"
 
 vars:
-    # VAULT: hirn
-    # VAULTS_DIR: C:\PROJECTS\OBSIDIAN\
-    PLUGIN: smartsync
-    DIR_PLUGIN: "{{.VAULTS_DIR}}/{{.VAULT}}/.obsidian/plugins/{{.PLUGIN}}"
+  PLUGIN: smartsync
+  DIR_PLUGIN: "{{.VAULTS_DIR}}/{{.VAULT_NAME}}/.obsidian/plugins/{{.PLUGIN_ID}}"
+  VERSION:
+    sh: node -e "console.log(require('./package.json').version)"
+  TIME:
+    sh: date +%H:%M:%S.%3N
+  FILES: ["main.js", "manifest.json", "styles.css"]
 
-    # USER_WORKING_DIR: C:\PROJECTS\Obsidian\{{.VAULT}}
-    FILES: "main.js styles.css manifest.json"
-    VERSION:
-        sh: node -e "console.log(require('./package.json').version)"
-
-dotenv: [".env"]
+dotenv: [".env"] # Copy .env-example to .env and modify according to Obsidian setup
 
 tasks:
-    default:
-        cmds:
-            - task: build
-            - task: copy
-            - task: reload-obsidian
-    copy:
-        cmds:
-            - cp main.js "{{.DIR_PLUGIN}}/main.js"
-            - cp styles.css "{{.DIR_PLUGIN}}/styles.css"
-            - cp manifest.json "{{.DIR_PLUGIN}}/manifest.json"
+  ####################################### DEVELOPMENT #######################################
+  default:
+    desc: This is the main task during development, just run "task" command
+    cmds:
+      - task: build
+      - task: copy
+      - task: reload-app
+      - task: date
 
-    build:
-        cmds:
-            - npm run build
+  build:
+    cmds:
+      - npm run build
 
-    reload:
-        cmds:
-            - obsidian plugin:reload id={{.PLUGIN}}
+  copy:
+    desc: Copies the build files to plugin folder in Obsidian, if folder exists and .env file is set up.
+    requires:
+      vars: [VAULTS_DIR, VAULT_NAME]
+    cmds:
+      - for: { var: FILES }
+        cmd: cp '{{.ITEM}}' '{{.DIR_PLUGIN}}/{{.ITEM}}'
 
-    reload-obsidian:
-        cmds:
-            - obsidian command id=app:reload
+  reload-plugin:
+    desc: "Reload only your plugin"
+    aliases: [plugin]
+    cmds:
+      - obsidian plugin:reload id={{.PLUGIN_ID}}
 
-    patch:
-        cmds:
-            - npm version patch
-    git:
-        cmds:
-            - git add .
-            - git commit -m "task"
-            - git push
+  reload-app:
+    desc: "Reload entire Obsidian app"
+    aliases: [app, reload-obsidian]
+    cmds:
+      - obsidian command id=app:reload
 
-    minify:
-        cmds:
-            - terser main.js -o main.min.js
-    time:
-        cmds:
-            - date +%T
+  ####################################### TOOLING #######################################
 
-    dev: npm run dev
+  dev: npm run dev
 
-    bump:
-        desc: "Commit Changes and bump minor version"
-        cmds:
-            - git add .
-            - cmd: git commit -m "bump"
-              ignore_error: true
-            - npm version minor
-            - npm run version
+  lint:
+    desc: Lints all ts and js in src/ folder. May require `npm install -g eslint`
+    aliases: [linter]
+    cmds:
+      - eslint src/.
 
-    release:
-        desc: "Commit Changes, create version tag, push to Github and create a new release on GitHub"
-        cmds:
-            - git add .
-            - cmd: git commit -m "{{.VERSION}} Commit"
-              ignore_error: true
-            # - git tag {{.VERSION}}
-            - git push
-            - git push --tags
-            - task: release-create
+  unused:
+    desc: Find unused functions and classes in the codebase
+    cmds:
+      - npx ts-unused-exports tsconfig.json
 
-    release-create:
-        cmds:
-            - gh release create {{.VERSION}} --title "{{.VERSION}}" --notes "New release of the SmartSync plugin for Obsidian." {{.FILES}}
+  minify: terser main.js -o main.min.js
 
-    test:
-        cmds:
-            - echo {{.VERSION}}
+  ####################################### RELEASING #######################################
+
+  release-full:
+    desc: Commit all, bump minor version and add tag, push to remote, create release with assets files.
+    aliases: [deploy, ship, publish]
+    interactive: true
+    cmds:
+      - git add .
+      - task: bump-minor
+      - task: release
+
+  bump-patch:
+    desc: "Bump package patch version (0.0.x)"
+    aliases: [patch]
+    cmds:
+      - npm version patch -f
+
+  bump-minor:
+    desc: "Bump package minor version (0.x.0)"
+    aliases: [minor, bump]
+    cmds:
+      - npm version minor -f
+
+  release:
+    desc: "Push version bump commit and tag to repository and create a new release on GitHub"
+    requires:
+      vars: [VERSION, PLUGIN_NAME, FILES]
+    cmds: # Requires you to have bumped version, commited changes and added new tag
+      - git push
+      - git push --tags
+      - task: release-create
+
+  release-create:
+    vars:
+      VERSION:
+        sh: node -e "console.log(require('./package.json').version)"
+    cmd: gh release create {{.VERSION}} --title "{{.VERSION}}" --notes "New release of the {{.PLUGIN_NAME}} plugin for Obsidian." {{.FILES | join " "}}
+
+  ####################################### UTILS #######################################
+
+  date:
+    desc: Print current date
+    silent: true
+    cmds: # Date format: 2006-01-02 15:04:05
+      - echo "Finished at {{now | date "15:04:05 2006-01-02 "}}"
+
+  time: date +%T

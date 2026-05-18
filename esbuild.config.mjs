@@ -51,9 +51,8 @@ async function build() {
 	if (prod) {
 		const result = await context.rebuild();
 		if (result.metafile) {
+			// Visit https://esbuild.github.io/analyze/ to analyze metafile
 			fs.writeFileSync("meta.json", JSON.stringify(result.metafile));
-			console.log("Build succeeded. Metafile saved to meta.json");
-			// console.log(result.metafile);
 		}
 		context.dispose();
 	}
