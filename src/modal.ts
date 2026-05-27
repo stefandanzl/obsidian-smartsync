@@ -564,7 +564,7 @@ export class FileTreeModal extends Modal {
 
         // Conflict resolution dropdown
         const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
-        actionSelect.addClass("hidden");
+        // actionSelect.addClass("hidden");
         const blankOption = actionSelect.createEl("option", { value: "", text: "Choose action…" });
         actionSelect.createEl("option", { value: "push", text: "⬆️ Keep Local" });
         actionSelect.createEl("option", { value: "pull", text: "⬇️ Keep Remote" });

@@ -5,252 +5,246 @@ import { Status } from "./const";
 import { DailyOfflineModal } from "./dailyModal";
 
 export class DailyNoteManager {
-    constructor(private plugin: SmartSyncPlugin) {
-        this.plugin = plugin;
-    }
+	constructor(private plugin: SmartSyncPlugin) {
+		this.plugin = plugin;
+	}
 
-    /**
-     * Creates or updates a daily note, comparing local and remote content
-     */
-    async getDailyNote(filePath: string, remoteContent: string | undefined): Promise<[file: TFile, usedTemplate?: boolean]> {
-        let finalContent = "";
-        let usedTemplate = false;
+	/**
+	 * Creates or updates a daily note, comparing local and remote content
+	 */
+	async getDailyNote(
+		filePath: string,
+		remoteContent: string | undefined
+	): Promise<[file: TFile, usedTemplate?: boolean]> {
+		let finalContent = "";
+		let usedTemplate = false;
 
-        // Check if file exists locally
-        const existingFile = this.plugin.app.vault.getAbstractFileByPath(filePath);
-        if (existingFile instanceof TFile) {
-            const localContent = await this.plugin.app.vault.read(existingFile);
+		// Check if file exists locally
+		const existingFile = this.plugin.app.vault.getAbstractFileByPath(filePath);
+		if (existingFile instanceof TFile) {
+			const localContent = await this.plugin.app.vault.read(existingFile);
 
-            // Use remote content if it's longer, otherwise keep local
-            // if (remoteContent && remoteContent.length > localContent.length) {
-            if (localContent === remoteContent) {
-                return [existingFile];
-            }
-            if (remoteContent !== undefined) {
-                this.plugin.show("Modified Daily Note from the one on SmartSync");
-                finalContent = remoteContent;
-                // Update existing file instead of creating new one
-                await this.plugin.app.vault.modify(existingFile, finalContent);
-                return [existingFile];
-            } else {
-                return [existingFile];
-            }
-        }
+			// Use remote content if it's longer, otherwise keep local
+			// if (remoteContent && remoteContent.length > localContent.length) {
+			if (localContent === remoteContent) {
+				return [existingFile];
+			}
+			if (remoteContent !== undefined) {
+				this.plugin.show("Modified Daily Note from the one on SmartSync");
+				finalContent = remoteContent;
+				// Update existing file instead of creating new one
+				await this.plugin.app.vault.modify(existingFile, finalContent);
+				return [existingFile];
+			} else {
+				return [existingFile];
+			}
+		}
 
-        // If file doesn't exist, use remote content or template
-        // finalContent = remoteContent || (await this.getTemplateContent());
+		// If file doesn't exist, use remote content or template
+		// finalContent = remoteContent || (await this.getTemplateContent());
 
-        try {
-            if (remoteContent) {
-                finalContent = remoteContent;
-                this.plugin.show("Fetching Daily Note from remote content");
-            } else {
-                const templateContent = await this.getTemplateContent();
-                if (templateContent === undefined) {
-                    throw new Error("Template File Error");
-                }
-                finalContent = templateContent;
-                usedTemplate = true;
-                this.plugin.show("Creating new Daily Note with template");
-            }
-            const file = await this.plugin.app.vault.create(filePath, finalContent);
-            return [file, usedTemplate];
-        } catch (error) {
-            this.plugin.show(`Daily Note File Error: ${error}`);
+		try {
+			if (remoteContent) {
+				finalContent = remoteContent;
+				this.plugin.show("Fetching Daily Note from remote content");
+			} else {
+				const templateContent = await this.getTemplateContent();
+				if (templateContent === undefined) {
+					throw new Error("Template File Error");
+				}
+				finalContent = templateContent;
+				usedTemplate = true;
+				this.plugin.show("Creating new Daily Note with template");
+			}
+			const file = await this.plugin.app.vault.create(filePath, finalContent);
+			return [file, usedTemplate];
+		} catch (error) {
+			this.plugin.show(`Daily Note File Error: ${error}`);
 
-            console.error(`Failed to create daily note at '${filePath}':`, error);
-            throw new Error(`Failed to create daily note: ${error}`);
-        }
-    }
+			console.error(`Failed to create daily note at '${filePath}':`, error);
+			throw new Error(`Failed to create daily note: ${error}`);
+		}
+	}
 
-    /**
-     * Gets template content if specified
-     */
-    private async getTemplateContent(): Promise<string | undefined> {
-        // const templatePath = this.plugin.settings.dailyNotesFolder;
-        let templatePath = this.plugin.settings.dailyNotesTemplate;
-        if (!templatePath) {
-            this.plugin.show("Error: No template path for Daily Notes provided!");
-            return undefined;
-        }
+	/**
+	 * Gets template content if specified
+	 */
+	private async getTemplateContent(): Promise<string | undefined> {
+		// const templatePath = this.plugin.settings.dailyNotesFolder;
+		let templatePath = this.plugin.settings.dailyNotesTemplate;
+		if (!templatePath) {
+			this.plugin.show("Error: No template path for Daily Notes provided!");
+			return undefined;
+		}
 
-        if (!templatePath.endsWith(".md")) {
-            templatePath = templatePath + ".md";
-        }
+		if (!templatePath.endsWith(".md")) {
+			templatePath = templatePath + ".md";
+		}
 
-        const templateFile = this.plugin.app.vault.getAbstractFileByPath(templatePath);
-        console.log(templateFile);
-        if (templateFile instanceof TFile) {
-            return await this.plugin.app.vault.read(templateFile);
-        }
-        this.plugin.show("Error with template file!");
-        return undefined;
-    }
+		const templateFile = this.plugin.app.vault.getAbstractFileByPath(templatePath);
+		console.log(templateFile);
+		if (templateFile instanceof TFile) {
+			return await this.plugin.app.vault.read(templateFile);
+		}
+		this.plugin.show("Error with template file!");
+		return undefined;
+	}
 
-    /**
-     * Generates the daily note path based on format and folder
-     */
-    getDailyNotePath(folder: string, format: string) {
-        //@ts-ignore
-        const momentDate = moment();
-        const formattedDate = momentDate.format(format);
+	/**
+	 * Generates the daily note path based on format and folder
+	 */
+	getDailyNotePath(folder: string, format: string) {
+		//@ts-ignore
+		const momentDate = moment();
+		const formattedDate = momentDate.format(format);
 
-        const filePath = normalizePath(`${folder}/${formattedDate}.md`);
-        const folderPath = filePath.split("/").slice(0, -1).join("/");
-        console.log(folderPath);
+		const filePath = normalizePath(`${folder}/${formattedDate}.md`);
+		const folderPath = filePath.split("/").slice(0, -1).join("/");
+		console.log(folderPath);
 
-        return { filePath, folderPath };
-    }
+		return { filePath, folderPath };
+	}
 
-    /**
-     * Fetches daily note content from SmartSyncServer
-     */
-    async getDailyNoteRemotely(dailyNotePath: string): Promise<string | undefined> {
-        try {
-            const remotePath = normalizePath(dailyNotePath);
-            const response = await this.plugin.smartSyncClient.getFile(remotePath);
-            if (response.status === 200 && response.data) {
-                return new TextDecoder().decode(response.data);
-            } else {
-                console.error("Daily Note: no connection possible");
-            }
-        } catch (error) {
-            console.log("Daily Note: Failed to fetch remote content due to connection error:", error);
-        }
-        return undefined;
-    }
+	/**
+	 * Fetches daily note content from SmartSyncServer
+	 */
+	async getDailyNoteRemotely(dailyNotePath: string): Promise<string | undefined> {
+		try {
+			const remotePath = normalizePath(dailyNotePath);
+			const response = await this.plugin.smartSyncClient.getFile(remotePath);
+			if (response.status === 200 && response.data) {
+				return new TextDecoder().decode(response.data);
+			} else {
+				console.error("Daily Note: no connection possible");
+			}
+		} catch (error) {
+			console.log("Daily Note: Failed to fetch remote content due to connection error:", error);
+		}
+		return undefined;
+	}
 
-    testSettings() {
-        console.log(this.plugin.settings.dailyNotesFolder);
-    }
+	testSettings() {
+		console.log(this.plugin.settings.dailyNotesFolder);
+	}
 
-    /**
-     * Opens the daily note and adds timestamp if configured
-     */
-    private async openNoteWithTimestamp(file: TFile, middleClick: boolean, usedTemplate?: boolean): Promise<void> {
-        let leaf: WorkspaceLeaf = undefined as unknown as WorkspaceLeaf; // this.plugin.app.workspace.getLeaf(middleClick);
-        if (!middleClick) {
-            const markdownLeaves = this.plugin.app.workspace.getLeavesOfType("markdown");
-            for (const l of markdownLeaves) {
-                //@ts-ignore no API
-                const path = l.view.getState()["file"] ?? "";
-                if (path && file.path === path) {
-                    leaf = l;
-                    console.log("found it");
-                    this.plugin.app.workspace.setActiveLeaf(leaf);
-                    break;
-                }
-            }
-        }
-        if (middleClick || !leaf) {
-            leaf = this.plugin.app.workspace.getLeaf(middleClick);
-            await leaf.openFile(file);
-        }
+	/**
+	 * Opens the daily note and adds timestamp if configured
+	 */
+	private async openNoteWithTimestamp(file: TFile, middleClick: boolean, usedTemplate?: boolean): Promise<void> {
+		let leaf: WorkspaceLeaf | undefined = undefined;
 
-        const editor = this.plugin.app.workspace.activeEditor?.editor;
+		if (!middleClick) {
+			const markdownLeaves = this.plugin.app.workspace.getLeavesOfType("markdown");
+			for (const l of markdownLeaves) {
+				//@ts-ignore no API
+				const path = l.view.getState()["file"] ?? "";
+				if (path && file.path === path) {
+					leaf = l;
+					break;
+				}
+			}
+		}
 
-        if (editor && this.plugin.settings.dailyNotesTimestamp && usedTemplate !== true) {
-            let lastLine = editor.lastLine();
-            const lastLineContent = editor.getLine(lastLine);
-            //@ts-ignore
-            const newLineContent = `${moment().format("HH:mm")} - `;
-            if (lastLineContent !== newLineContent) {
-                editor.setLine(lastLine, lastLineContent + `\n\n` + newLineContent);
-            }
-            lastLine = editor.lastLine();
-            const lastLineLength = editor.getLine(lastLine).length;
-            // editor.setCursor({ line: lastLine, ch: lastLineLength });
+		if (middleClick || !leaf) {
+			leaf = this.plugin.app.workspace.getLeaf(middleClick);
+			await leaf.openFile(file);
+		} else {
+			// Existing leaf in another split: properly activate it
+			this.plugin.app.workspace.setActiveLeaf(leaf, { focus: true });
+			// revealLeaf ensures the leaf's split/tab is brought forward
+			this.plugin.app.workspace.revealLeaf(leaf);
+		}
 
-            //TEST
-            // lastLine = lastLine - 40;
+		// IMPORTANT: grab the editor from the *leaf we found*, not from activeEditor —
+		// activeEditor may still point at the previously-focused split until Obsidian
+		// processes the focus change.
+		//@ts-ignore - editor lives on MarkdownView
+		const editor = leaf.view?.editor;
 
-            //@ts-ignore not-in-API
-            // editor.addHighlights(
-            //     [
-            //         {
-            //             from: { line: lastLine, ch: 0 },
-            //             to: { line: lastLine, ch: 5 },
-            //         },
-            //     ],
-            //     "is-flashing",
-            //     true
-            // );
+		if (editor && this.plugin.settings.dailyNotesTimestamp && usedTemplate !== true) {
+			let lastLine = editor.lastLine();
+			const lastLineContent = editor.getLine(lastLine);
+			//@ts-ignore
+			const newLineContent = `${moment().format("HH:mm")} - `;
+			if (lastLineContent !== newLineContent) {
+				editor.setLine(lastLine, lastLineContent + `\n\n` + newLineContent);
+			}
+			lastLine = editor.lastLine();
+			const lastLineLength = editor.getLine(lastLine).length;
 
-            leaf.setEphemeralState({
-                line: lastLine,
-                // focus: true,
-                // match: {
-                //     // content: "",
-                //     matches: [[0, 5]],
-                // },
-            });
+			leaf.setEphemeralState({
+				line: lastLine,
+				focus: true,
+			});
 
-            setTimeout(() => {
-                editor.setCursor({ line: lastLine, ch: lastLineLength });
-            }, 50);
+			// Defer cursor placement AND focus so Obsidian's own focus handling
+			// (from setActiveLeaf + ephemeral state) has settled first.
+			setTimeout(() => {
+				editor.setCursor({ line: lastLine, ch: lastLineLength });
+				editor.focus();
+			}, 50);
 
-            function keydownCallback(ev: KeyboardEvent) {
-                leaf.setEphemeralState({
-                    match: {
-                        content: "",
-                        matches: [],
-                    },
-                });
-                removeEventListener("keydown", keydownCallback);
-            }
+			function keydownCallback(ev: KeyboardEvent) {
+				leaf!.setEphemeralState({
+					match: { content: "", matches: [] },
+				});
+				removeEventListener("keydown", keydownCallback);
+			}
 
-            addEventListener("keydown", keydownCallback);
-        }
-    }
+			addEventListener("keydown", keydownCallback);
+		}
+	}
 
-    private getDailyNotePathInfo() {
-        const folder = this.plugin.settings.dailyNotesFolder;
-        const format = this.plugin.settings.dailyNotesFormat;
-        return this.getDailyNotePath(folder, format);
-    }
+	private getDailyNotePathInfo() {
+		const folder = this.plugin.settings.dailyNotesFolder;
+		const format = this.plugin.settings.dailyNotesFormat;
+		return this.getDailyNotePath(folder, format);
+	}
 
-    /**
-     * Main function to create/sync daily note
-     */
-    async dailyNote(middleClick = false) {
-        try {
-            // Handle offline scenarios
-            if (this.plugin.status === Status.ERROR) {
-                logNotice("Error detected! ❌\nClear error in SmartSync control modal and try to get Daily Note again!");
-                return;
-            }
+	/**
+	 * Main function to create/sync daily note
+	 */
+	async dailyNote(middleClick = false) {
+		try {
+			// Handle offline scenarios
+			if (this.plugin.status === Status.ERROR) {
+				logNotice(
+					"Error detected! ❌\nClear error in SmartSync control modal and try to get Daily Note again!"
+				);
+				return;
+			}
 
-            // Check if modal is already open - if so, don't create another
-            if (this.plugin.dailyOfflineModal) {
-                logNotice("Daily note modal already open - please use the modal options");
-                return;
-            }
+			// Check if modal is already open - if so, don't create another
+			if (this.plugin.dailyOfflineModal) {
+				logNotice("Daily note modal already open - please use the modal options");
+				return;
+			}
 
-            // Quick connection test
-            // const connected = await this.establishConnection();
-            const connected = await this.plugin.operations.test(true, false);
-            if (!connected) {
-                if (this.plugin.dailyOfflineModal) {
-                    return;
-                }
-                // Show modal instead of auto-retry
-                this.plugin.dailyOfflineModal = new DailyOfflineModal(this.plugin.app, this.plugin, { middleClick });
-                this.plugin.dailyOfflineModal.open();
-                return;
-            }
+			// Quick connection test
+			// const connected = await this.establishConnection();
+			const connected = await this.plugin.operations.test(true, false);
+			if (!connected) {
+				if (this.plugin.dailyOfflineModal) {
+					return;
+				}
+				// Show modal instead of auto-retry
+				this.plugin.dailyOfflineModal = new DailyOfflineModal(this.plugin.app, this.plugin, { middleClick });
+				this.plugin.dailyOfflineModal.open();
+				return;
+			}
 
-            const { filePath, folderPath } = this.getDailyNotePathInfo();
+			const { filePath, folderPath } = this.getDailyNotePathInfo();
 
-            await createFolderIfNotExists(this.plugin.app.vault, folderPath);
+			await createFolderIfNotExists(this.plugin.app.vault, folderPath);
 
-            const remoteContent = await this.getDailyNoteRemotely(filePath);
-            const [dailyNote, usedTemplate] = await this.getDailyNote(filePath, remoteContent);
+			const remoteContent = await this.getDailyNoteRemotely(filePath);
+			const [dailyNote, usedTemplate] = await this.getDailyNote(filePath, remoteContent);
 
-            await this.openNoteWithTimestamp(dailyNote, middleClick, usedTemplate);
-        } catch (err) {
-            console.error("Failed to create/open daily note:", err);
-            // logNotice(`Daily note operation failed: ${err.message}`);
-            throw new Error(`Daily note operation failed: ${err.message}`);
-        }
-    }
+			await this.openNoteWithTimestamp(dailyNote, middleClick, usedTemplate);
+		} catch (err) {
+			console.error("Failed to create/open daily note:", err);
+			// logNotice(`Daily note operation failed: ${err.message}`);
+			throw new Error(`Daily note operation failed: ${err.message}`);
+		}
+	}
 }

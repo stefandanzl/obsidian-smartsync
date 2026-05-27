@@ -3,7 +3,10 @@
 version: "3"
 
 vars:
-  PLUGIN: smartsync
+  PLUGIN_ID: smartsync
+  PLUGIN_NAME: Smart Sync
+  PLUGIN_DESCRIPTION: The smart way to sync your vault
+
   DIR_PLUGIN: "{{.VAULTS_DIR}}/{{.VAULT_NAME}}/.obsidian/plugins/{{.PLUGIN_ID}}"
   VERSION:
     sh: node -e "console.log(require('./package.json').version)"
