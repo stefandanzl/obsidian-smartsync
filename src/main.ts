@@ -254,8 +254,13 @@ export default class SmartSync extends Plugin {
                     return;
                 }
 
-                // Sync succeeded
-                this.prevData.files[filePath] = hash;
+                // Sync succeeded - store FileEntry with metadata
+                const file = abstractFile as TFile;
+                this.prevData.files[filePath] = {
+                    hash,
+                    size: file.stat.size,
+                    mtime: Math.floor(file.stat.mtime / 1000)
+                };
                 this.savePrevData();
                 this.setStatus(Status.NONE);
                 this.modSyncConnAttempt = 0;

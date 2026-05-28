@@ -10,13 +10,19 @@ export interface SmartSyncConfig {
 }
 
 export interface ChecksumsResponse {
-    checksums: Record<string, string>;
-    file_count: number;
+    checksums: Record<string, FileEntry>;
+    files_total: number;
+}
+
+export interface FileEntry {
+    hash: string;
+    size: number;
+    mtime: number;
 }
 
 export interface StatusResponse {
     online: boolean;
-    file_count: number;
+    files_total: number;
 }
 
 export interface SuccessResponse {
@@ -78,12 +84,12 @@ export class SmartSyncClient {
             // Validate response structure
             if (!response.json || typeof response.json.online !== "boolean") {
                 console.error("Invalid status response structure:", response.json);
-                return { online: false, file_count: 0 };
+                return { online: false, files_total: 0 };
             }
             return response.json;
         } catch (error) {
             // console.error("SmartSync getStatus error:", error);
-            return { online: false, file_count: 0 };
+            return { online: false, files_total: 0 };
         }
     }
 
@@ -193,7 +199,7 @@ export class SmartSyncClient {
     /**
      * Trigger a rescan of checksums on server
      */
-    async triggerRescan(): Promise<{ scanned: boolean; file_count: number; checksums: Record<string, string> }> {
+    async triggerRescan(): Promise<{ scanned: boolean; files_total: number; checksums: Record<string, string> }> {
         const response = await requestUrl({
             url: this.createFullUrl("/checksums"),
             method: "PUT",

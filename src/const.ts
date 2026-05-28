@@ -109,7 +109,13 @@ export type Type = "added" | "deleted" | "modified" | "except";
 
 export type ExplicitAction = "push" | "pull";
 
-export type FileList = Record<Path, Hash>;
+export type FileEntry = {
+	hash: string;
+	size: number;
+	mtime: number; // seconds since epoch
+};
+
+export type FileList = Record<Path, FileEntry>;
 
 export type FileTree = {
     added: FileList;

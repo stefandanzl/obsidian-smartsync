@@ -1,7 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { DiffModal } from "./diffModal";
-import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, Type, Hash, ExplicitAction } from "./const";
+import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, Type, ExplicitAction } from "./const";
 import { dirname } from "./util";
 
 export class FileTreeModal extends Modal {
@@ -187,14 +187,14 @@ export class FileTreeModal extends Modal {
         locations.forEach((locationKey) => {
             types.forEach((typeKey) => {
                 const files = this.plugin.fullFileTrees![locationKey][typeKey];
-                Object.entries(files).forEach(([path, hash]) => {
+                Object.entries(files).forEach(([path, fileEntry]) => {
                     currentPaths.add(path);
                     // Only add if not already present (preserve existing selections)
                     if (!this.plugin.selectedFiles[path]) {
                         this.plugin.selectedFiles[path] = {
                             location: locationKey,
                             type: typeKey,
-                            hash: hash as Hash,
+                            hash: fileEntry.hash,
                             selected: true, // Default to selected
                         };
                     }

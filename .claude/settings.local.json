@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(task:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(go build *)",
+      "Bash(go vet *)"
     ],
     "deny": [],
     "ask": []
