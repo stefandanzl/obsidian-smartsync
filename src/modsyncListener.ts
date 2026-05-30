@@ -169,7 +169,7 @@ export class ModSyncListener {
 	/**
 	 * Classic debounce: reset timer on each trigger, execute when changes stop
 	 */
-	private debounceFileChange(path: string, type: FileChangeType): void {
+	private debounceFileChange(path: string, type: FileChangeType, delay = this.config.debounceDelay): void {
 		// Reset existing timer
 		const existingTimer = this.debounceTimers.get(path);
 		if (existingTimer) {
@@ -180,7 +180,7 @@ export class ModSyncListener {
 		const timer = setTimeout(async () => {
 			this.debounceTimers.delete(path);
 			await this.processFileChange(path, type);
-		}, this.config.debounceDelay);
+		}, delay);
 
 		this.debounceTimers.set(path, timer);
 	}
@@ -229,7 +229,10 @@ export class ModSyncListener {
 
 			// Handle raw deletions (determine from file existence)
 			if (type === "raw" && !stat) {
-				await this.handleDeletion(path, "raw");
+				// Event type delete has to be enabled for "raw" events triggering deletion
+				if (this.plugin.settings.modSyncConfig.eventTypes.delete) {
+					await this.handleDeletion(path, "raw");
+				}
 				return;
 			}
 

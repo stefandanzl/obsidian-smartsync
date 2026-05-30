@@ -20,6 +20,16 @@ export interface FileEntry {
     mtime: number;
 }
 
+export interface CompareChecksumsResponse {
+    differing: Record<string, FileEntry>;
+    equal: Record<string, FileEntry>;
+    notfound: Record<string, {}>;
+}
+
+export interface SimpleChecksumsResponse {
+    checksums: Record<string, FileEntry>;
+}
+
 export interface StatusResponse {
     online: boolean;
     files_total: number;
@@ -211,12 +221,53 @@ export class SmartSyncClient {
     }
 
     /**
-     * Check if server is online (exists check equivalent)
+     * Get selective checksums - compare format (detect differences)
      */
-    async exists(): Promise<boolean> {
+    async compareChecksums(compare: Record<string, string>): Promise<CompareChecksumsResponse> {
+        const response = await requestUrl({
+            url: this.createFullUrl("/checksums"),
+            method: "POST",
+            headers: {
+                ...(this.createAuthHeader() ? { Authorization: this.createAuthHeader() } : {}),
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ compare }),
+        });
+        return response.json;
+    }
+
+    /**
+     * Get selective checksums - simple format (get current state for specific paths)
+     */
+    async getSelectiveChecksums(paths: string[]): Promise<SimpleChecksumsResponse> {
+        const response = await requestUrl({
+            url: this.createFullUrl("/checksums"),
+            method: "POST",
+            headers: {
+                ...(this.createAuthHeader() ? { Authorization: this.createAuthHeader() } : {}),
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ paths }),
+        });
+        return response.json;
+    }
+
+    /**
+     * Check if server has file
+     */
+    async exists(path: string): Promise<boolean> {
         try {
-            const status = await this.getStatus();
-            return status.online;
+        const response = await requestUrl({
+            url: this.createFullUrl("/checksums"),
+            method: "POST",
+            headers: {
+                ...(this.createAuthHeader() ? { Authorization: this.createAuthHeader() } : {}),
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ paths:[path] }),
+        });
+        const { checksums } = response.json;
+        return !!checksums[path]
         } catch (error) {
             return false;
         }
