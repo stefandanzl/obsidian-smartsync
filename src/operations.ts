@@ -315,9 +315,12 @@ export class Operations {
             },
             hashStats: {
                 totalFiles: 0,
-                cachedHashes: 0,
-                calculatedHashes: 0,
-                skippedFiles: 0,
+                sources: {
+                    prevData: 0,
+                    calculated: 0,
+                    cache: 0
+                },
+                excluded: 0
             },
         };
 
@@ -352,8 +355,8 @@ export class Operations {
             stats.fileCounts.local = Object.keys(localFiles.files).length;
 
             // Update hash statistics from checksum
-            if (this.plugin.hashStats && this.plugin.hashStats.local) {
-                stats.hashStats = this.plugin.hashStats.local;
+            if (this.plugin.hashStats ) {
+                stats.hashStats = this.plugin.hashStats;
             }
 
             // Compare file trees
@@ -383,13 +386,14 @@ export class Operations {
             // Log hash statistics
             if (stats.hashStats) {
                 const hashPercentage =
-                    stats.hashStats.totalFiles > 0 ? Math.round((stats.hashStats.cachedHashes / stats.hashStats.totalFiles) * 100) : 0;
+                    stats.hashStats.totalFiles > 0 ? Math.round(((stats.hashStats.sources.prevData + stats.hashStats.sources.cache) / stats.hashStats.totalFiles) * 100) : 0;
                 this.plugin.log(`\n=== HASH OPTIMIZATION STATISTICS ===`);
                 this.plugin.log(`Total files processed: ${stats.hashStats.totalFiles}`);
-                this.plugin.log(`Hashes from cache: ${stats.hashStats.cachedHashes} (${hashPercentage}%)`);
-                this.plugin.log(`Hashes calculated: ${stats.hashStats.calculatedHashes}`);
-                this.plugin.log(`Files skipped (excluded): ${stats.hashStats.skippedFiles}`);
-                this.plugin.log(`Cache efficiency: ${hashPercentage}% - Higher is better!`);
+                this.plugin.log(`Hashes from prevData: ${stats.hashStats.sources.prevData}`);
+                this.plugin.log(`Hashes from cache: ${stats.hashStats.sources.cache} (${hashPercentage}% optimized)`);
+                this.plugin.log(`Hashes calculated: ${stats.hashStats.sources.calculated}`);
+                this.plugin.log(`Files excluded: ${stats.hashStats.excluded}`);
+                this.plugin.log(`Optimization rate: ${hashPercentage}% - Higher is better!`);
                 this.plugin.log(`===============================`);
             }
 

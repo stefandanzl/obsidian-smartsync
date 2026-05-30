@@ -2,7 +2,7 @@ import { SmartSyncClient, ChecksumsResponse } from "./smartSync";
 import SmartSyncPlugin from "./main";
 import { sha256 } from "./util";
 import { TAbstractFile, TFile, normalizePath } from "obsidian";
-import { FileList } from "./const";
+import { FileList, Hash } from "./const";
 import ignoreFactory from "ignore";
 
 interface FileProcessor {
@@ -13,9 +13,20 @@ interface ConcurrencyProcessor {
     <T>(items: T[], worker: (item: T) => Promise<void>, limit: number): Promise<void>;
 }
 
+interface HashStats  {
+            totalFiles: number,
+            sources: {
+                prevData: number,
+                calculated: number,
+                cache: number
+            },
+            excluded: number
+        };
+
 export class Checksum {
     allLocalFiles: FileList = {};
     hashDurations: Record<string, number> = {};
+    hashStats: HashStats;
 
     constructor(public plugin: SmartSyncPlugin) {
         this.plugin = plugin;
@@ -61,8 +72,11 @@ export class Checksum {
         };
 
         const processFile: FileProcessor = async (file) => {
+            this.plugin.hashStats.totalFiles++;
+
             try {
                 if (exclude && this.isExcluded(file)) {
+                    this.plugin.hashStats.excluded++;
                     return;
                 }
 
@@ -82,9 +96,12 @@ export class Checksum {
                     prevEntry.mtime === currentMtime) {
                     // Size and mtime match - reuse previous hash
                     hash = prevEntry.hash;
+                    this.plugin.hashStats.sources.prevData++;
                 } else {
                     const data = await this.plugin.app.vault.adapter.readBinary(file);
                     hash = await sha256(data);
+                    this.plugin.hashStats.sources.calculated++;
+
                 }
 
                 // Store FileEntry with metadata
@@ -131,21 +148,24 @@ export class Checksum {
         this.plugin.log(fileCache);
 
         // Initialize statistics for this run
-        const hashStats = {
-            totalFiles: 0,
-            cachedHashes: 0,
-            calculatedHashes: 0,
-            skippedFiles: 0,
-        };
+           this.plugin.hashStats = {
+                    totalFiles: 0,
+                    sources: {
+                        prevData: 0,
+                        calculated: 0,
+                        cache: 0
+                    },
+                    excluded: 0
+            };
 
         await Promise.all(
             localTFiles.map(async (element) => {
                 try {
                     if (element instanceof TFile) {
                         const filePath = element.path;
-                        hashStats.totalFiles++;
+                        this.plugin.hashStats.totalFiles++;
                         if (exclude && this.isExcluded(filePath)) {
-                            hashStats.skippedFiles++;
+                            this.plugin.hashStats.excluded++;
                             return;
                         }
 
@@ -162,7 +182,7 @@ export class Checksum {
                             prevEntry.mtime === currentMtime) {
                             // Size and mtime match - reuse previous hash
                             hash = prevEntry.hash;
-                            hashStats.skippedFiles++;
+                            this.plugin.hashStats.sources.prevData++;
                         } else {
                             // Calculate new hash
                             const filePath = element.path;
@@ -172,7 +192,7 @@ export class Checksum {
                                 try {
                                     const cacheHash = fileCache[filePath].hash;
                                     if (cacheHash) {
-                                        hashStats.cachedHashes++;
+                                        this.plugin.hashStats.sources.cache++;
                                         hash = cacheHash;
                                     }
                                 } catch (error) {
@@ -185,7 +205,7 @@ export class Checksum {
                                 const start = Date.now();
                                 const content = await this.plugin.app.vault.readBinary(element);
                                 hash = await sha256(content);
-                                hashStats.calculatedHashes++;
+                                this.plugin.hashStats.sources.calculated++;
                                 this.hashDurations[filePath] = Date.now() - start;
                             }
                         }
@@ -206,19 +226,22 @@ export class Checksum {
         await this.getHiddenLocalFiles(configDir, exclude);
 
         // Store statistics in plugin for access from operations
-        if (!this.plugin.hashStats) {
-            this.plugin.hashStats = {
-                local: {
-                    totalFiles: 0,
-                    cachedHashes: 0,
-                    calculatedHashes: 0,
-                    skippedFiles: 0,
-                },
-            };
-        }
-        this.plugin.hashStats.local = hashStats;
+        // if (!this.plugin.hashStats) {
+        //     this.plugin.hashStats = {
+        //         local: {
+        //             totalFiles: 0,
+        //             sources: {
+        //                 prevData: 0,
+        //                 calculated: 0,
+        //                 cache: 0
+        //             },
+        //             excluded: 0
+        //         },
+        //     };
+        // }
+        // this.plugin.hashStats.local = hashStats;
 
-        this.plugin.log(`LOCAL HASH STATISTICS: ${JSON.stringify(hashStats, null, 2)}`);
+        this.plugin.log(`LOCAL HASH STATISTICS: ${JSON.stringify(this.plugin.hashStats, null, 2)}`);
         this.plugin.log(this.hashDurations);
 
         if (exclude) {

@@ -78,12 +78,13 @@ export default class SmartSync extends Plugin {
     localFiles: FileList;
     remoteFiles: FileList;
     hashStats: {
-        local: {
             totalFiles: number;
-            cachedHashes: number;
-            calculatedHashes: number;
-            skippedFiles: number;
-        };
+            sources: {
+                prevData: number;
+                calculated: number;
+                cache: number;
+            };
+            excluded: number;
     };
 
     loadingTotal: number;
