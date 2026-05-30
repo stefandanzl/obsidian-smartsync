@@ -400,29 +400,6 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                 );
 
             new Setting(containerEl)
-                .setName("Batch Window (milliseconds)")
-                .setDesc("Time to collect changes before processing batch (default: 5000ms)")
-                .addText((text) =>
-                    text
-                        .setPlaceholder("5000")
-                        .setValue(this.plugin.settings.modSyncConfig.batchWindow.toString())
-                        .onChange(async (value) => {
-                            const parseVal = parseInt(value, 10);
-                            if (isNaN(parseVal) || parseVal < 1000) {
-                                this.plugin.show("Invalid value (minimum 1000ms)");
-                            } else {
-                                this.plugin.settings.modSyncConfig.batchWindow = parseVal;
-                                await this.plugin.saveSettings();
-                                if (this.plugin.modSyncListener) {
-                                    this.plugin.modSyncListener.updateConfig({
-                                        batchWindow: parseVal
-                                    });
-                                }
-                            }
-                        })
-                );
-
-            new Setting(containerEl)
                 .setName("Debounce Delay (milliseconds)")
                 .setDesc("Wait time for file editing to pause before processing (default: 2000ms)")
                 .addText((text) =>
@@ -443,77 +420,6 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                                 }
                             }
                         })
-                );
-
-            new Setting(containerEl)
-                .setName("Maximum Batch Size")
-                .setDesc("Maximum number of changes to process in a single batch (default: 50)")
-                .addText((text) =>
-                    text
-                        .setPlaceholder("50")
-                        .setValue(this.plugin.settings.modSyncConfig.maxBatchSize.toString())
-                        .onChange(async (value) => {
-                            const parseVal = parseInt(value, 10);
-                            if (isNaN(parseVal) || parseVal < 1) {
-                                this.plugin.show("Invalid value (minimum 1)");
-                            } else {
-                                this.plugin.settings.modSyncConfig.maxBatchSize = parseVal;
-                                await this.plugin.saveSettings();
-                                if (this.plugin.modSyncListener) {
-                                    this.plugin.modSyncListener.updateConfig({
-                                        maxBatchSize: parseVal
-                                    });
-                                }
-                            }
-                        })
-                );
-
-            new Setting(containerEl)
-                .setName("Maximum Retry Attempts")
-                .setDesc("Maximum number of retry attempts for failed syncs (default: 5)")
-                .addText((text) =>
-                    text
-                        .setPlaceholder("5")
-                        .setValue(this.plugin.settings.modSyncConfig.maxRetries.toString())
-                        .onChange(async (value) => {
-                            const parseVal = parseInt(value, 10);
-                            if (isNaN(parseVal) || parseVal < 0) {
-                                this.plugin.show("Invalid value (minimum 0)");
-                            } else {
-                                this.plugin.settings.modSyncConfig.maxRetries = parseVal;
-                                await this.plugin.saveSettings();
-                                if (this.plugin.modSyncListener) {
-                                    this.plugin.modSyncListener.updateConfig({
-                                        maxRetries: parseVal
-                                    });
-                                }
-                            }
-                        })
-                );
-
-            new Setting(containerEl)
-                .setName("Enable Priority Mode")
-                .setDesc("Adaptive priority mode for rapid file changes (default: true)")
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.modSyncConfig.enablePriorityMode).onChange(async (value) => {
-                        this.plugin.settings.modSyncConfig.enablePriorityMode = value;
-                        await this.plugin.saveSettings();
-                        if (this.plugin.modSyncListener) {
-                            this.plugin.modSyncListener.updateConfig({
-                                enablePriorityMode: value
-                            });
-                        }
-                    })
-                );
-
-            new Setting(containerEl)
-                .setName("Enable Conflict Detection")
-                .setDesc("Check for conflicts before syncing files (default: true)")
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.modSyncConfig.conflictDetection).onChange(async (value) => {
-                        this.plugin.settings.modSyncConfig.conflictDetection = value;
-                        await this.plugin.saveSettings();
-                    })
                 );
         }
     }

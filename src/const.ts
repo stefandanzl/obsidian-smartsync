@@ -169,12 +169,9 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
 
     modSyncConfig: {
         enabled: false,
-        batchWindow: 5000,
         debounceDelay: 2000,
-        maxBatchSize: 50,
-        maxRetries: 5,
-        enablePriorityMode: true,
-        conflictDetection: true,
+        //maxRetries: 5,
+        //conflictDetection: true,
         dryRun: true,
         eventTypes: {
             create: true,
@@ -203,12 +200,7 @@ export interface ModSyncEventTypes {
 
 export interface ModSyncConfig {
     enabled: boolean;
-    batchWindow: number;
     debounceDelay: number;
-    maxBatchSize: number;
-    maxRetries: number;
-    enablePriorityMode: boolean;
-    conflictDetection: boolean;
     dryRun: boolean;
     eventTypes: ModSyncEventTypes;
 }
