@@ -88,16 +88,6 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                     })
             );
 
-        new Setting(containerEl)
-            .setName("Mod Sync")
-            .setDesc("Enable Synchronization on modification")
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.modSync).onChange(async (value) => {
-                    this.plugin.settings.modSync = value;
-                    this.plugin.setModSync();
-                    await this.plugin.saveSettings();
-                })
-            );
 
         new Setting(containerEl)
             .setName("Auto Interval Sync")
@@ -234,5 +224,297 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 })
             );
+
+            
+        new Setting(containerEl)
+            .setName("Mod Sync")
+            .setDesc("Enable Synchronization on modification")
+            .addToggle((toggle) =>
+                toggle.setValue(this.plugin.settings.modSync).onChange(async (value) => {
+                    this.plugin.settings.modSync = value;
+                    this.plugin.setModSync();
+                    await this.plugin.saveSettings();
+                    // Refresh settings to show/hide ModSync configuration
+                    this.display();
+                })
+            );
+
+        // Advanced ModSync Configuration Section - Only show when ModSync is enabled
+        if (this.plugin.settings.modSync) {
+            containerEl.createEl("h2", { text: "ModSync Configuration" });
+            containerEl.createEl("p", {
+                text: "Configure automatic file synchronization behavior when changes are detected."
+            });
+
+            // Event Types Configuration
+            containerEl.createEl("h3", { text: "Event Types" });
+            containerEl.createEl("p", {
+                text: "Choose which file change types should trigger automatic synchronization."
+            });
+
+            new Setting(containerEl)
+                .setName("Track file creation")
+                .setDesc("Sync new files when they are created")
+                .addToggle((toggle) =>
+                    toggle.setValue(this.plugin.settings.modSyncConfig.eventTypes?.create ?? true).onChange(async (value) => {
+                        // Initialize eventTypes if it doesn't exist
+                        if (!this.plugin.settings.modSyncConfig.eventTypes) {
+                            this.plugin.settings.modSyncConfig.eventTypes = {
+                                create: true,
+                                modify: true,
+                                delete: true,
+                                rename: true,
+                                raw: true
+                            };
+                        }
+                        this.plugin.settings.modSyncConfig.eventTypes.create = value;
+                        await this.plugin.saveSettings();
+                        if (this.plugin.modSyncListener) {
+                            this.plugin.modSyncListener.updateConfig({
+                                eventTypes: this.plugin.settings.modSyncConfig.eventTypes
+                            });
+                        }
+                    })
+                );
+
+            new Setting(containerEl)
+                .setName("Track file modifications")
+                .setDesc("Sync files when they are modified")
+                .addToggle((toggle) =>
+                    toggle.setValue(this.plugin.settings.modSyncConfig.eventTypes?.modify ?? true).onChange(async (value) => {
+                        if (!this.plugin.settings.modSyncConfig.eventTypes) {
+                            this.plugin.settings.modSyncConfig.eventTypes = {
+                                create: true,
+                                modify: true,
+                                delete: true,
+                                rename: true,
+                                raw: true
+                            };
+                        }
+                        this.plugin.settings.modSyncConfig.eventTypes.modify = value;
+                        await this.plugin.saveSettings();
+                        if (this.plugin.modSyncListener) {
+                            this.plugin.modSyncListener.updateConfig({
+                                eventTypes: this.plugin.settings.modSyncConfig.eventTypes
+                            });
+                        }
+                    })
+                );
+
+            new Setting(containerEl)
+                .setName("Track file deletions")
+                .setDesc("Sync file deletions to remote")
+                .addToggle((toggle) =>
+                    toggle.setValue(this.plugin.settings.modSyncConfig.eventTypes?.delete ?? true).onChange(async (value) => {
+                        if (!this.plugin.settings.modSyncConfig.eventTypes) {
+                            this.plugin.settings.modSyncConfig.eventTypes = {
+                                create: true,
+                                modify: true,
+                                delete: true,
+                                rename: true,
+                                raw: true
+                            };
+                        }
+                        this.plugin.settings.modSyncConfig.eventTypes.delete = value;
+                        await this.plugin.saveSettings();
+                        if (this.plugin.modSyncListener) {
+                            this.plugin.modSyncListener.updateConfig({
+                                eventTypes: this.plugin.settings.modSyncConfig.eventTypes
+                            });
+                        }
+                    })
+                );
+
+            new Setting(containerEl)
+                .setName("Track file renames")
+                .setDesc("Sync file renames/moves")
+                .addToggle((toggle) =>
+                    toggle.setValue(this.plugin.settings.modSyncConfig.eventTypes?.rename ?? true).onChange(async (value) => {
+                        if (!this.plugin.settings.modSyncConfig.eventTypes) {
+                            this.plugin.settings.modSyncConfig.eventTypes = {
+                                create: true,
+                                modify: true,
+                                delete: true,
+                                rename: true,
+                                raw: true
+                            };
+                        }
+                        this.plugin.settings.modSyncConfig.eventTypes.rename = value;
+                        await this.plugin.saveSettings();
+                        if (this.plugin.modSyncListener) {
+                            this.plugin.modSyncListener.updateConfig({
+                                eventTypes: this.plugin.settings.modSyncConfig.eventTypes
+                            });
+                        }
+                    })
+                );
+
+            new Setting(containerEl)
+                .setName("Track .obsidian/ folder changes")
+                .setDesc("Sync changes in .obsidian/ folder (using raw events)")
+                .addToggle((toggle) =>
+                    toggle.setValue(this.plugin.settings.modSyncConfig.eventTypes?.raw ?? true).onChange(async (value) => {
+                        if (!this.plugin.settings.modSyncConfig.eventTypes) {
+                            this.plugin.settings.modSyncConfig.eventTypes = {
+                                create: true,
+                                modify: true,
+                                delete: true,
+                                rename: true,
+                                raw: true
+                            };
+                        }
+                        this.plugin.settings.modSyncConfig.eventTypes.raw = value;
+                        await this.plugin.saveSettings();
+                        if (this.plugin.modSyncListener) {
+                            this.plugin.modSyncListener.updateConfig({
+                                eventTypes: this.plugin.settings.modSyncConfig.eventTypes
+                            });
+                        }
+                    })
+                );
+
+            // Sync Behavior Configuration
+            containerEl.createEl("h3", { text: "Sync Behavior" });
+            containerEl.createEl("p", {
+                text: "Configure how automatic synchronization works."
+            });
+
+            new Setting(containerEl)
+                .setName("Dry Run Mode")
+                .setDesc("Enable dry run mode - logs what would be synced without actually syncing (USE FOR TESTING)")
+                .addToggle((toggle) =>
+                    toggle.setValue(this.plugin.settings.modSyncConfig.dryRun).onChange(async (value) => {
+                        this.plugin.settings.modSyncConfig.dryRun = value;
+                        await this.plugin.saveSettings();
+                        // Update listener config immediately
+                        if (this.plugin.modSyncListener) {
+                            this.plugin.modSyncListener.updateConfig({
+                                dryRun: value
+                            });
+                        }
+                        // Show notification
+                        const modeMessage = value ? "DRY RUN MODE ENABLED - No actual syncing will occur" : "Dry run mode disabled - Normal syncing active";
+                        this.plugin.show(modeMessage, 5000);
+                        console.log(`[ModSync] ${modeMessage}`);
+                    })
+                );
+
+            new Setting(containerEl)
+                .setName("Batch Window (milliseconds)")
+                .setDesc("Time to collect changes before processing batch (default: 5000ms)")
+                .addText((text) =>
+                    text
+                        .setPlaceholder("5000")
+                        .setValue(this.plugin.settings.modSyncConfig.batchWindow.toString())
+                        .onChange(async (value) => {
+                            const parseVal = parseInt(value, 10);
+                            if (isNaN(parseVal) || parseVal < 1000) {
+                                this.plugin.show("Invalid value (minimum 1000ms)");
+                            } else {
+                                this.plugin.settings.modSyncConfig.batchWindow = parseVal;
+                                await this.plugin.saveSettings();
+                                if (this.plugin.modSyncListener) {
+                                    this.plugin.modSyncListener.updateConfig({
+                                        batchWindow: parseVal
+                                    });
+                                }
+                            }
+                        })
+                );
+
+            new Setting(containerEl)
+                .setName("Debounce Delay (milliseconds)")
+                .setDesc("Wait time for file editing to pause before processing (default: 2000ms)")
+                .addText((text) =>
+                    text
+                        .setPlaceholder("2000")
+                        .setValue(this.plugin.settings.modSyncConfig.debounceDelay.toString())
+                        .onChange(async (value) => {
+                            const parseVal = parseInt(value, 10);
+                            if (isNaN(parseVal) || parseVal < 500) {
+                                this.plugin.show("Invalid value (minimum 500ms)");
+                            } else {
+                                this.plugin.settings.modSyncConfig.debounceDelay = parseVal;
+                                await this.plugin.saveSettings();
+                                if (this.plugin.modSyncListener) {
+                                    this.plugin.modSyncListener.updateConfig({
+                                        debounceDelay: parseVal
+                                    });
+                                }
+                            }
+                        })
+                );
+
+            new Setting(containerEl)
+                .setName("Maximum Batch Size")
+                .setDesc("Maximum number of changes to process in a single batch (default: 50)")
+                .addText((text) =>
+                    text
+                        .setPlaceholder("50")
+                        .setValue(this.plugin.settings.modSyncConfig.maxBatchSize.toString())
+                        .onChange(async (value) => {
+                            const parseVal = parseInt(value, 10);
+                            if (isNaN(parseVal) || parseVal < 1) {
+                                this.plugin.show("Invalid value (minimum 1)");
+                            } else {
+                                this.plugin.settings.modSyncConfig.maxBatchSize = parseVal;
+                                await this.plugin.saveSettings();
+                                if (this.plugin.modSyncListener) {
+                                    this.plugin.modSyncListener.updateConfig({
+                                        maxBatchSize: parseVal
+                                    });
+                                }
+                            }
+                        })
+                );
+
+            new Setting(containerEl)
+                .setName("Maximum Retry Attempts")
+                .setDesc("Maximum number of retry attempts for failed syncs (default: 5)")
+                .addText((text) =>
+                    text
+                        .setPlaceholder("5")
+                        .setValue(this.plugin.settings.modSyncConfig.maxRetries.toString())
+                        .onChange(async (value) => {
+                            const parseVal = parseInt(value, 10);
+                            if (isNaN(parseVal) || parseVal < 0) {
+                                this.plugin.show("Invalid value (minimum 0)");
+                            } else {
+                                this.plugin.settings.modSyncConfig.maxRetries = parseVal;
+                                await this.plugin.saveSettings();
+                                if (this.plugin.modSyncListener) {
+                                    this.plugin.modSyncListener.updateConfig({
+                                        maxRetries: parseVal
+                                    });
+                                }
+                            }
+                        })
+                );
+
+            new Setting(containerEl)
+                .setName("Enable Priority Mode")
+                .setDesc("Adaptive priority mode for rapid file changes (default: true)")
+                .addToggle((toggle) =>
+                    toggle.setValue(this.plugin.settings.modSyncConfig.enablePriorityMode).onChange(async (value) => {
+                        this.plugin.settings.modSyncConfig.enablePriorityMode = value;
+                        await this.plugin.saveSettings();
+                        if (this.plugin.modSyncListener) {
+                            this.plugin.modSyncListener.updateConfig({
+                                enablePriorityMode: value
+                            });
+                        }
+                    })
+                );
+
+            new Setting(containerEl)
+                .setName("Enable Conflict Detection")
+                .setDesc("Check for conflicts before syncing files (default: true)")
+                .addToggle((toggle) =>
+                    toggle.setValue(this.plugin.settings.modSyncConfig.conflictDetection).onChange(async (value) => {
+                        this.plugin.settings.modSyncConfig.conflictDetection = value;
+                        await this.plugin.saveSettings();
+                    })
+                );
+        }
     }
 }

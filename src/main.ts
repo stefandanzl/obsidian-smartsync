@@ -1,12 +1,12 @@
-import { TFile, TAbstractFile, Notice, Plugin, setIcon, normalizePath, debounce } from "obsidian";
+import { Notice, Plugin, setIcon, TFile } from "obsidian";
 import { SmartSyncClient } from "./smartSync";
 import {} from "./settings";
 import { FileTreeModal } from "./modal";
 import { Checksum } from "./checksum";
 import { Compare } from "./compare";
 import { Operations } from "./operations";
-import { join, sha256 } from "./util";
 import { launcher } from "./setup";
+import { ModSyncListener } from "./modsyncListener";
 import {
     FileList,
     PreviousObject,
@@ -30,6 +30,7 @@ export default class SmartSync extends Plugin {
     checksum: Checksum;
     operations: Operations;
     dailyNote: DailyNoteManager;
+    modSyncListener: ModSyncListener;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any Not exposed in Obsidian API
     settingPrivate: any;
@@ -55,10 +56,6 @@ export default class SmartSync extends Plugin {
     status: Status;
     lastFileEdited: string;
     lastModSync: number;
-    modSyncDebounceTimers: Record<string, ReturnType<typeof setTimeout>> = {}; // Debounce for editing (fixed delay)
-    modSyncRetryTimers: Record<string, ReturnType<typeof setTimeout>> = {}; // Retry for offline (exponential backoff)
-    modSyncConnAttempt: number = 0;
-    modifyHandlerRef: ((file: TAbstractFile) => void) | null = null;
 
     notice: Notice;
     pause: boolean;
@@ -106,6 +103,22 @@ export default class SmartSync extends Plugin {
 
     onload() {
         launcher(this);
+
+        // Wait for layout to be ready before registering event listeners
+        // This prevents catching startup file loading events
+        this.app.workspace.onLayoutReady(() => {
+            console.warn("🚀 [SmartSync] Layout ready - Registering ModSync listeners NOW");
+
+            // Initialize and register ModSync listeners AFTER layout is ready
+            if (this.settings.modSync) {
+                this.setModSync();
+            }
+
+            
+            if (this.settings.autoSync) {
+                this.setAutoSync();
+            }
+        });
     }
 
     log(...text: string[] | unknown[]) {
@@ -170,127 +183,27 @@ export default class SmartSync extends Plugin {
     }
 
     /**
-     * Debounce: Wait until editing stops, then sync once.
-     * Called on every file modify event - resets timer on each call.
+     * Initialize the comprehensive modification sync listener
+     * This replaces the old simple debounce system with advanced batch processing
      */
-    debounceModSync(file: TFile) {
-        const filePath = file.path;
-
-        // If there's already a timer or sync in progress, skip
-        if (this.modSyncDebounceTimers[filePath]) {
-            return; // Timer exists - either waiting or syncing
-        }
-
-        // Schedule sync after debounce delay
-        this.modSyncDebounceTimers[filePath] = setTimeout(async () => {
-            // Timer fires - marker remains during sync, cleared after
-            await this.modSyncCallback(file);
-            delete this.modSyncDebounceTimers[filePath];
-        }, 2000);
-    }
-
-    /**
-     * Offline retry: Schedule retry with exponential backoff.
-     * Called when sync fails due to offline status.
-     */
-    scheduleOfflineRetry(file: TFile) {
-        const filePath = file.path;
-        const attempt = this.modSyncConnAttempt;
-
-        // Clear existing retry timer
-        if (this.modSyncRetryTimers[filePath]) {
-            clearTimeout(this.modSyncRetryTimers[filePath]);
-        }
-
-        // Exponential backoff: 10s * 1.5^attempt, capped at 60s
-        const delay = Math.min(10000 * Math.pow(1.5, attempt), 60000);
-        this.log(`Scheduling offline retry in ${delay / 1000}s (attempt ${attempt})`);
-
-        this.modSyncRetryTimers[filePath] = setTimeout(() => {
-            delete this.modSyncRetryTimers[filePath];
-            this.modSyncCallback(file);
-        }, delay);
-    }
-
-    async modSyncCallback(abstractFile: TAbstractFile) {
-        if (this.isSyncing) {
-            this.log("Skipping mod sync during sync operation");
-            return;
-        }
-
-        if (!(abstractFile instanceof TFile)) {
-            return;
-        }
-
-        const filePath = abstractFile.path;
-
-        // Check offline status and schedule retry if needed
-        if (this.status === Status.OFFLINE) {
-            const online = await this.operations.test(false, false);
-            if (online) {
-                this.setStatus(Status.NONE);
-                this.modSyncConnAttempt = 0;
-            } else {
-                this.scheduleOfflineRetry(abstractFile);
-                this.modSyncConnAttempt++;
-                return;
-            }
-        }
-
-        // Perform sync when online
-        if (this.status === Status.NONE) {
-            this.lastFileEdited = filePath;
-            this.lastModSync = Date.now();
-            this.setStatus(Status.AUTO);
-
-            try {
-                this.log(filePath);
-                const fileContent = await this.app.vault.adapter.readBinary(normalizePath(filePath));
-                const hash = await sha256(fileContent);
-                const response = await this.smartSyncClient.uploadFile(filePath, fileContent);
-
-                this.log("modSync path: ", filePath, response);
-
-                if (!response) {
-                    // Sync failed - schedule retry
-                    this.setStatus(Status.OFFLINE);
-                    this.scheduleOfflineRetry(abstractFile);
-                    this.modSyncConnAttempt++;
-                    return;
-                }
-
-                // Sync succeeded - store FileEntry with metadata
-                const file = abstractFile as TFile;
-                this.prevData.files[filePath] = {
-                    hash,
-                    size: file.stat.size,
-                    mtime: Math.floor(file.stat.mtime / 1000)
-                };
-                this.savePrevData();
-                this.setStatus(Status.NONE);
-                this.modSyncConnAttempt = 0;
-            } catch (error) {
-                console.log("ModSync Connectivity ERROR!", error);
-                this.show("ModSync Error");
-                this.setStatus(Status.ERROR);
-            }
-        }
-    }
-
     setModSync() {
-        if (!this.modifyHandlerRef) {
-            this.modifyHandlerRef = (file: TAbstractFile) => {
-                if (file instanceof TFile && file.path !== this.prevPath) {
-                    this.log(`Modify event for: ${file.path}, isSyncing: ${this.isSyncing}`);
-                    this.debounceModSync(file);
-                }
-            };
+        if (!this.modSyncListener) {
+            this.modSyncListener = new ModSyncListener(this);
         }
+                // Apply configuration from settings
+        this.modSyncListener.updateConfig({
+            ...this.settings.modSyncConfig
+        });
 
         if (this.settings.modSync) {
-            this.registerEvent(this.app.vault.on("modify", this.modifyHandlerRef));
+            this.modSyncListener.registerEventListeners();
+            const modeText = this.settings.modSyncConfig.dryRun ? " (DRY RUN MODE)" : "";
+            this.log(`Ultimate ModSync activated with comprehensive event tracking${modeText}`);
         } else {
-            this.app.vault.off("modify", this.modifyHandlerRef);
+            if (this.modSyncListener) {
+                this.modSyncListener.unregisterEventListeners();
+                this.log("ModSync deactivated");
+            }
         }
     }
 

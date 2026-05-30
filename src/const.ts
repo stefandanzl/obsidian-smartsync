@@ -167,6 +167,24 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
     skipHiddenMobile: false,
     skipHiddenDesktop: false,
 
+    modSyncConfig: {
+        enabled: false,
+        batchWindow: 5000,
+        debounceDelay: 2000,
+        maxBatchSize: 50,
+        maxRetries: 5,
+        enablePriorityMode: true,
+        conflictDetection: true,
+        dryRun: true,
+        eventTypes: {
+            create: true,
+            modify: true,
+            delete: true,
+            rename: true,
+            raw: true
+        }
+    },
+
     dailyNotesFolder: "Daily Notes",
     dailyNotesFormat: "YYYY/YYYY-MM/YYYY-MM-DD ddd",
     dailyNotesTemplate: "",
@@ -174,6 +192,26 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
 
     debugMode: false,
 };
+
+export interface ModSyncEventTypes {
+    create: boolean;
+    modify: boolean;
+    delete: boolean;
+    rename: boolean;
+    raw: boolean;
+}
+
+export interface ModSyncConfig {
+    enabled: boolean;
+    batchWindow: number;
+    debounceDelay: number;
+    maxBatchSize: number;
+    maxRetries: number;
+    enablePriorityMode: boolean;
+    conflictDetection: boolean;
+    dryRun: boolean;
+    eventTypes: ModSyncEventTypes;
+}
 
 export interface SmartSyncSettings {
     url: string;
@@ -190,6 +228,8 @@ export interface SmartSyncSettings {
     enableRibbons: boolean;
     skipHiddenDesktop: boolean;
     skipHiddenMobile: boolean;
+
+    modSyncConfig: ModSyncConfig;
 
     dailyNotesFolder: string;
     dailyNotesFormat: string;

@@ -4,7 +4,8 @@
       "Bash(task:*)",
       "Bash(npx tsc:*)",
       "Bash(go build *)",
-      "Bash(go vet *)"
+      "Bash(go vet *)",
+      "Bash(npm run *)"
     ],
     "deny": [],
     "ask": []
