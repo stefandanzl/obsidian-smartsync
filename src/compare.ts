@@ -9,7 +9,6 @@ export class Compare {
     // Function to compare two file trees and find changes
     compareFileTreesExcept(remoteFiles: FileTree, localFiles: FileTree) {
         // Identify added and modified files
-        // for (const [file1, hash1] of Object.entries(remoteFiles)) {
 
         for (const file1 in remoteFiles.modified) {
             if (localFiles.modified[file1]) {
@@ -23,22 +22,39 @@ export class Compare {
 
         // Identify where hashes didn't change and remove them from fileTree, as they didn't change
         for (const file1 in remoteFiles.added) {
-            if (localFiles.added[file1] === remoteFiles.added[file1]) {
+            const localValue = localFiles.added[file1];
+            const remoteValue = remoteFiles.added[file1];
+
+            if (!localValue) {
+                this.plugin.log("compare.ts: no localValue defined for "+ file1)
+                continue;
+            }
+
+            // Both are FileEntry - compare hashes
+            if (remoteValue.hash === localValue.hash) {
                 delete remoteFiles.added[file1];
                 delete localFiles.added[file1];
-            } else if (localFiles.added[file1]) {
-                remoteFiles.except[file1] = remoteFiles.added[file1];
-                localFiles.except[file1] = localFiles.added[file1];
+            } else {
+                remoteFiles.except[file1] = remoteValue;
+                localFiles.except[file1] = localValue;
 
                 delete remoteFiles.added[file1];
                 delete localFiles.added[file1];
             }
         }
+
         for (const file1 in localFiles.except) {
-            if (localFiles.except[file1] === remoteFiles.except[file1]) {
+            const localValue = localFiles.except[file1];
+            const remoteValue = remoteFiles.except[file1];
+
+            if (!remoteValue) {
+                this.plugin.log("compare.ts: no remoteValue defined for "+ file1)
+                continue;
+            }
+            // Both are FileEntry - compare hashes
+            if (localValue.hash === remoteValue.hash) {
                 delete remoteFiles.except[file1];
                 delete localFiles.except[file1];
-                // console.log("deleted Except:",file1);
             }
         }
 
@@ -55,15 +71,15 @@ export class Compare {
         };
 
         // Identify added and modified files
-        for (const [currentFile, currentHash] of Object.entries(currentFiles)) {
-            const matchingHash = previousFiles[currentFile];
+        for (const [currentFile, currentValue] of Object.entries(currentFiles)) {
+            const previousValue = previousFiles[currentFile];
 
-            if (previousFiles[currentFile] === currentFiles[currentFile]) {
-                // nothing
-            } else if (!matchingHash) {
-                fileTree.added[currentFile] = currentHash;
-            } else if (matchingHash !== currentHash) {
-                fileTree.modified[currentFile] = currentHash;
+            if (!previousValue) {
+                fileTree.added[currentFile] = currentValue;
+            } else if (previousValue.hash === currentValue.hash) {
+                // Unchanged - hashes match
+            } else {
+                fileTree.modified[currentFile] = currentValue;
             }
         }
 
@@ -77,18 +93,7 @@ export class Compare {
             }
         });
 
-        // // Identify deleted files
-        // for (const [prevFile, prevHash] of Object.entries(previous)) {
-        //   if (!current[prevFile]) {
-
-        //     if (current[prevFile] === previous[prevFile]){
-        //       // unchanged
-        //     } else {
-        //       deleted[prevFile] = prevHash;
-        //     }
-        //   }
-        // }
-
+        // Identify deleted files
         for (const [file] of Object.entries(previousFiles)) {
             if (!currentFiles.hasOwnProperty(file)) {
                 // The key is not in the current object

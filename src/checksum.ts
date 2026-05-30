@@ -1,7 +1,7 @@
 import { SmartSyncClient, ChecksumsResponse } from "./smartSync";
 import SmartSyncPlugin from "./main";
 import { sha256 } from "./util";
-import { TAbstractFile, TFile, TFolder, normalizePath } from "obsidian";
+import { TAbstractFile, TFile, normalizePath } from "obsidian";
 import { FileList } from "./const";
 import ignoreFactory from "ignore";
 
@@ -65,33 +65,49 @@ export class Checksum {
                 if (exclude && this.isExcluded(file)) {
                     return;
                 }
-                const start = Date.now();
-                const data = await this.plugin.app.vault.adapter.readBinary(file);
-                this.allLocalFiles[file] = await sha256(data);
-                this.hashDurations[file] = Date.now() - start;
+
+                // Get file stats
+                const stat = await this.plugin.app.vault.adapter.stat(file);
+                if (!stat || stat.type !== "file") return;
+
+                const currentSize = stat.size;
+                const currentMtime = Math.floor(stat.mtime / 1000);
+
+                // Check prevData for optimization
+                const prevEntry = this.plugin.prevData?.files[file];
+                let hash: string;
+
+                if (prevEntry &&
+                    prevEntry.size === currentSize &&
+                    prevEntry.mtime === currentMtime) {
+                    // Size and mtime match - reuse previous hash
+                    hash = prevEntry.hash;
+                } else {
+                    const data = await this.plugin.app.vault.adapter.readBinary(file);
+                    hash = await sha256(data);
+                }
+
+                // Store FileEntry with metadata
+                this.allLocalFiles[file] = {
+                    hash,
+                    size: currentSize,
+                    mtime: currentMtime
+                };
             } catch (error) {
                 console.error(`Error processing file ${file}:`, error);
             }
         };
 
-        // Process folders recursively
-        const processFolder = async (folder: string): Promise<void> => {
-            const folderPath = `${folder}/`;
+        // Process files
+        await processConcurrently(files, processFile, concurrency);
 
-            if (exclude && this.isExcluded(folderPath)) {
-                return;
+        // Recursively process subdirectories
+        for (const folder of folders) {
+            if (exclude && this.isExcluded(folder + "/")) {
+                continue;
             }
-
-            try {
-                this.allLocalFiles[folderPath] = "dir";
-                await this.getHiddenLocalFiles(normalizePath(folder), exclude, concurrency);
-            } catch (error) {
-                console.error(`Error processing folder ${folder}:`, error);
-            }
-        };
-
-        // Execute file and folder processing
-        await Promise.all([processConcurrently(files, processFile, concurrency), processConcurrently(folders, processFolder, concurrency)]);
+            await this.getHiddenLocalFiles(normalizePath(folder), exclude, concurrency);
+        }
     }
 
     /**
@@ -132,33 +148,54 @@ export class Checksum {
                             hashStats.skippedFiles++;
                             return;
                         }
-                        if (fileCache && filePath.endsWith(".md")) {
-                            try {
-                                const cacheHash = fileCache[filePath].hash;
-                                if (!cacheHash) {
-                                    throw new Error("empty fileCache");
+
+                        // Get current file stats (convert ms to seconds)
+                        const currentSize = element.stat.size;
+                        const currentMtime = Math.floor(element.stat.mtime / 1000);
+
+                        // Check prevData for optimization
+                        const prevEntry = this.plugin.prevData?.files[filePath];
+                        let hash: string | undefined;
+
+                        if (prevEntry &&
+                            prevEntry.size === currentSize &&
+                            prevEntry.mtime === currentMtime) {
+                            // Size and mtime match - reuse previous hash
+                            hash = prevEntry.hash;
+                            hashStats.skippedFiles++;
+                        } else {
+                            // Calculate new hash
+                            const filePath = element.path;
+
+                            // Try fileCache first (for .md files)
+                            if (fileCache && filePath.endsWith(".md")) {
+                                try {
+                                    const cacheHash = fileCache[filePath].hash;
+                                    if (cacheHash) {
+                                        hashStats.cachedHashes++;
+                                        hash = cacheHash;
+                                    }
+                                } catch (error) {
+                                    console.error("fileCache error", element, error);
                                 }
-                                this.allLocalFiles[filePath] = cacheHash;
-                                hashStats.cachedHashes++;
-                                return;
-                            } catch (error) {
-                                console.error("fileCache Error", element, error);
+                            }
+
+                            // Calculate hash if not yet assigned
+                            if (!hash) {
+                                const start = Date.now();
+                                const content = await this.plugin.app.vault.readBinary(element);
+                                hash = await sha256(content);
+                                hashStats.calculatedHashes++;
+                                this.hashDurations[filePath] = Date.now() - start;
                             }
                         }
-                        const start = Date.now();
-                        const content = await this.plugin.app.vault.readBinary(element);
-                        this.allLocalFiles[filePath] = await sha256(content);
-                        hashStats.calculatedHashes++;
-                        this.hashDurations[filePath] = Date.now() - start;
-                        return;
-                    } else if (element instanceof TFolder) {
-                        const filePath = element.path + "/";
-                        if (filePath === "//" || (exclude && this.isExcluded(filePath))) {
-                            return;
-                        }
-                        this.allLocalFiles[filePath] = "dir";
-                    } else {
-                        console.error("NEITHER FILE NOR FOLDER? ", element);
+
+                        // Store FileEntry with metadata
+                        this.allLocalFiles[filePath] = {
+                            hash,
+                            size: currentSize,
+                            mtime: currentMtime
+                        };
                     }
                 } catch (error) {
                     console.error("localTFiles Errororr", element, error);
@@ -166,7 +203,6 @@ export class Checksum {
             })
         );
         const configDir = this.plugin.app.vault.configDir;
-        this.allLocalFiles[configDir + "/"] = "dir";
         await this.getHiddenLocalFiles(configDir, exclude);
 
         // Store statistics in plugin for access from operations
@@ -210,16 +246,15 @@ export class Checksum {
             // Get all checksums from SmartSyncServer
             const response: ChecksumsResponse = await smartSyncClient.getChecksums();
 
-            this.plugin.log(`Remote checksums received: ${response.file_count} files`);
+            this.plugin.log(`Remote checksums received: ${response.files_total} files`);
 
             // Convert checksums object to FileList format
-            // SmartSyncServer returns: { checksums: { "path/to/file": "hash123", ... }, file_count: N }
-            // Server now returns full vault paths like "/My Notes/test.md"
+            // Server now sends FileEntry objects directly
             const remoteHashTree: FileList = {};
 
-            for (const [filePath, checksum] of Object.entries(response.checksums)) {
-                // Store paths as-is from server (full vault paths included)
-                remoteHashTree[filePath] = checksum;
+            for (const [filePath, fileEntry] of Object.entries(response.checksums)) {
+                // Store FileEntry directly from server
+                remoteHashTree[filePath] = fileEntry;
             }
 
             this.plugin.remoteFiles = remoteHashTree;
