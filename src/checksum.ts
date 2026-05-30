@@ -91,7 +91,8 @@ export class Checksum {
                 const prevEntry = this.plugin.prevData?.files[file];
                 let hash: string;
 
-                if (prevEntry &&
+                if (this.plugin.hashFlags.prevData &&
+                    prevEntry &&
                     prevEntry.size === currentSize &&
                     prevEntry.mtime === currentMtime) {
                     // Size and mtime match - reuse previous hash
@@ -177,7 +178,8 @@ export class Checksum {
                         const prevEntry = this.plugin.prevData?.files[filePath];
                         let hash: string | undefined;
 
-                        if (prevEntry &&
+                        if (this.plugin.hashFlags.prevData &&
+                            prevEntry &&
                             prevEntry.size === currentSize &&
                             prevEntry.mtime === currentMtime) {
                             // Size and mtime match - reuse previous hash
@@ -188,7 +190,7 @@ export class Checksum {
                             const filePath = element.path;
 
                             // Try fileCache first (for .md files)
-                            if (fileCache && filePath.endsWith(".md")) {
+                            if (this.plugin.hashFlags.cache && fileCache && filePath.endsWith(".md")) {
                                 try {
                                     const cacheHash = fileCache[filePath].hash;
                                     if (cacheHash) {
@@ -203,10 +205,15 @@ export class Checksum {
                             // Calculate hash if not yet assigned
                             if (!hash) {
                                 const start = Date.now();
-                                const content = await this.plugin.app.vault.readBinary(element);
-                                hash = await sha256(content);
-                                this.plugin.hashStats.sources.calculated++;
-                                this.hashDurations[filePath] = Date.now() - start;
+                                try {
+                                    const content = await this.plugin.app.vault.readBinary(element);
+                                    hash = await sha256(content);
+                                    this.plugin.hashStats.sources.calculated++;
+                                    this.hashDurations[filePath] = Date.now() - start;
+                                } catch (error){
+                                    console.error(`Hash calculation failed for ${filePath}:`, error);
+                                    return; // Skip file rather than storing undefined
+                                }
                             }
                         }
 

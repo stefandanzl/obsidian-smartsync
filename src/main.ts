@@ -86,6 +86,10 @@ export default class SmartSync extends Plugin {
             };
             excluded: number;
     };
+    hashFlags: {
+            prevData: boolean;
+            cache: boolean;
+    };
 
     loadingTotal: number;
     loadingProcessed: number;

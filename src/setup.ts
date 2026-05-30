@@ -30,6 +30,9 @@ export async function launcher(plugin: SmartSync) {
     plugin.prevPath = `${plugin.app.vault.configDir}/plugins/smartSync/prevdata.json`;
     // console.log(plugin.prevPath)
 
+    plugin.hashFlags.cache = true;
+    plugin.hashFlags.prevData = true;
+
     plugin.allFiles = {
         local: {},
         remote: {},
