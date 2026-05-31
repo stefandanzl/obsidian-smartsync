@@ -424,6 +424,60 @@ export class Operations {
         }
     }
 
+    async saveAndCheck() {
+        // Test connection
+        if (!(await this.plugin.operations.test(false))) return false;
+        
+        // Scan both in parallel
+        const [remoteFiles, localFiles] = await Promise.all([
+            this.plugin.checksum.generateRemoteHashTree(this.plugin.smartSyncClient),
+            this.plugin.checksum.generateLocalHashTree(true)
+        ]);
+        
+        // Compare
+        // this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
+        
+        // Save ONLY selected, non-excluded files to prevData
+        
+        this.plugin.allFiles.local = localFiles.files;
+        this.plugin.allFiles.remote = remoteFiles.files;
+        this.plugin.fullFileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
+        
+        const saveableFiles: any = {...localFiles.files};
+
+        Object.keys(this.plugin.selectedFiles).forEach((path) => {
+            if (this.plugin.selectedFiles[path].selected === false) {
+                if (path in this.plugin.prevData.files) {
+                    saveableFiles[path] = this.plugin.prevData.files[path];  // Keep old state
+                } else {
+                    delete saveableFiles[path];  // Remove if wasn't in prevData
+                }
+            }
+        });
+
+        const newExcept = this.plugin.compare.checkExistKey(this.plugin.fileTrees.localFiles.except, saveableFiles);
+
+        const now =  msToSeconds(Date.now());
+        
+        this.plugin.prevData = {
+            error: this.plugin.prevData.error,
+            files: saveableFiles,
+            except: newExcept,
+            timestamps: {
+                prevdataUpdate: now,
+                lastFullSync:  now,
+                lastFileSync: now,
+            },
+        };
+
+        this.plugin.lastScrollPosition = 0;
+        this.plugin.modal?.renderFileTrees();
+        
+        this.plugin.app.vault.adapter.write(this.plugin.prevPath, JSON.stringify(this.plugin.prevData, null, 2));
+        this.plugin.show("Saved state and checked for differences");
+        return true;
+    }
+
     /**
      * Apply explicit user actions for conflict resolution
      * Moves files from 'except' to appropriate category based on user choice
@@ -508,7 +562,7 @@ export class Operations {
      * @param show
      * @returns
      */
-    async sync(controller: Controller, show = true, postSync: PostSync = "check") {
+    async sync(controller: Controller, show = true, postSync: PostSync = "saveAndCheck") {
         console.log("[SYNC] Starting sync, show:", show, "controller:", controller);
         if (this.plugin.prevData.error) {
             console.log("[SYNC] Blocked by error state");
@@ -650,7 +704,7 @@ export class Operations {
                 await this.plugin.saveState();
                 await this.check(true);
             }
-            if (postSync === "prevSuccess"){
+            else if (postSync === "prevSuccess"){
                 for (const filePath in this.newPrevDataFiles.modifiedAdded){
                     const statPromise = this.plugin.app.vault.adapter.stat(filePath)
                     const readPromise = this.plugin.app.vault.adapter.readBinary(filePath)
@@ -680,6 +734,8 @@ export class Operations {
                 }
 
                 this.plugin.savePrevData();
+            } else if (postSync === "saveAndCheck"){
+                this.saveAndCheck()
             }
 
             // this.plugin.tempExcludedFiles = {};

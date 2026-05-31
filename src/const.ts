@@ -140,7 +140,7 @@ export type PreviousObject = {
     };
 };
 
-export type PostSync = "check" | "prevSuccess" | "none"; 
+export type PostSync = "check" | "prevSuccess" | "saveAndCheck" | "none"; 
 
 // This is used to build custom functionality with the sync function like inverse actions
 export type Controller = {
