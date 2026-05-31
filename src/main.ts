@@ -6,7 +6,7 @@ import { Checksum } from "./checksum";
 import { Compare } from "./compare";
 import { Operations } from "./operations";
 import { launcher } from "./setup";
-import { ModSyncListener } from "./modsyncListener";
+import { ModSyncListener } from "./modsync";
 import {
     FileList,
     PreviousObject,
@@ -56,6 +56,7 @@ export default class SmartSync extends Plugin {
     status: Status;
     lastFileEdited: string;
     lastModSync: number;
+    sessionSynced: boolean;
 
     notice: Notice;
     pause: boolean;

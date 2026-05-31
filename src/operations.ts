@@ -441,7 +441,8 @@ export class Operations {
         
         this.plugin.allFiles.local = localFiles.files;
         this.plugin.allFiles.remote = remoteFiles.files;
-        this.plugin.fullFileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
+        this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
+        this.plugin.fullFileTrees = structuredClone(this.plugin.fileTrees);
         
         const saveableFiles: any = {...localFiles.files};
 
@@ -737,7 +738,7 @@ export class Operations {
             } else if (postSync === "saveAndCheck"){
                 this.saveAndCheck()
             }
-
+            this.plugin.sessionSynced = true;
             // this.plugin.tempExcludedFiles = {};
 
             show && this.plugin.show("Done");
