@@ -74,8 +74,12 @@ export async function launcher(plugin: SmartSync) {
         plugin.prevData = {
             error: true,
             files: {},
-            date: Date.now(),
             except: {},
+            timestamps: {
+                prevdataUpdate: Date.now(),
+                lastFullSync: 0,
+                lastFileSync: 0,
+            },
         };
 
         plugin.app.vault.adapter.write(plugin.prevPath, JSON.stringify(plugin.prevData, null, 2));

@@ -130,11 +130,17 @@ export type FileTrees = {
 };
 
 export type PreviousObject = {
-    date: number;
     error: boolean;
     files: FileList;
     except: FileList;
+    timestamps: {
+        prevdataUpdate: number; // When prevdata.json was last saved locally
+        lastFullSync: number; // When last full sync completed
+        lastFileSync: number; // When last single file sync completed
+    };
 };
+
+export type PostSync = "check" | "prevSuccess" | "none"; 
 
 // This is used to build custom functionality with the sync function like inverse actions
 export type Controller = {

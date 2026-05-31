@@ -1,12 +1,20 @@
 import SmartSyncPlugin from "./main";
 import { SmartSyncClient } from "./smartSync";
-import { join, dirname, calcDuration, logNotice } from "./util";
+import { join, dirname, calcDuration, logNotice, msToSeconds, sha256 } from "./util";
 import { normalizePath } from "obsidian";
-import { Controller, FileList, FileTree, FileTrees, Status, STATUS_ITEMS } from "./const";
+import { Controller, FileEntry, FileList, FileTree, FileTrees, PostSync, Status, STATUS_ITEMS } from "./const";
 
 export class Operations {
+    newPrevDataFiles: {
+        modifiedAdded: string[];
+        deleted: string[];
+    }
     constructor(public plugin: SmartSyncPlugin) {
         this.plugin = plugin;
+        this.newPrevDataFiles = {
+            modifiedAdded: [],
+            deleted: []
+        }
     }
 
     /**
@@ -51,29 +59,22 @@ export class Operations {
 
     private async downloadFile(filePath: string): Promise<boolean> {
         try {
-            if (filePath.endsWith("/")) {
-                await this.ensureLocalDirectory(filePath);
-                this.plugin.processed();
-                return true;
-            }
-
-            const remotePath = filePath;
-
             // Verify remote file exists by checking if server is online
             const status = await this.plugin.smartSyncClient.getStatus();
             if (!status.online) {
-                console.error(`Remote server is offline, cannot download ${remotePath}`);
+                console.error(`Remote server is offline, cannot download ${filePath}`);
                 return false;
             }
 
             // Download with retry
-            const fileData = await this.downloadWithRetry(remotePath);
+            const fileData = await this.downloadWithRetry(filePath);
             if (fileData.status !== 200) {
-                throw new Error(`Failed to download ${remotePath}: ${fileData.status}`);
+                throw new Error(`Failed to download ${filePath}: ${fileData.status}`);
             }
-            /// app.vault.adapter.writeBinary("AAA/AAA/A1.md","TEST")
+            await this.ensureLocalDirectory(dirname(filePath));
             await this.plugin.app.vault.adapter.writeBinary(filePath, fileData.data);
             this.plugin.processed();
+            this.newPrevDataFiles.modifiedAdded.push(filePath);
             return true;
         } catch (error) {
             this.plugin.log(`Error downloading ${filePath}:`, error);
@@ -102,10 +103,13 @@ export class Operations {
     }
 
     private async ensureLocalDirectory(path: string): Promise<void> {
-        const exists = await this.plugin.app.vault.adapter.exists(path);
-        if (!exists) {
-            console.log(`Creating local directory: ${path}`);
-            await this.plugin.app.vault.createFolder(path);
+        const parts = normalizePath(path).split('/').filter(Boolean);
+        let current = '';
+        for (const part of parts) {
+            current = current ? `${current}/${part}` : part;
+            if (!(await this.plugin.app.vault.adapter.exists(current))) {
+                await this.plugin.app.vault.createFolder(current);
+            }
         }
     }
 
@@ -123,27 +127,24 @@ export class Operations {
             await this.uploadFile(localFilePath);
         }
 
-        console.log("Upload completed");
+        this.plugin.log("Upload completed");
     }
 
     /**
      * Upload a single file to SmartSyncServer
      */
-    private async uploadFile(localFilePath: string): Promise<void> {
+    private async uploadFile(filePath: string): Promise<void> {
         try {
-            if (localFilePath.endsWith("/")) {
-                await this.ensureRemoteDirectory(localFilePath);
-                return;
+
+            const fileContent = await this.plugin.app.vault.adapter.readBinary(normalizePath(filePath));
+
+            if (await this.plugin.smartSyncClient.uploadFile(filePath, fileContent)){
+                this.plugin.processed();
+                this.newPrevDataFiles.modifiedAdded.push(filePath);
+                this.plugin.log(`Uploaded: ${filePath}`);
             }
-
-            const fileContent = await this.plugin.app.vault.adapter.readBinary(normalizePath(localFilePath));
-            const remoteFilePath = localFilePath;
-
-            await this.plugin.smartSyncClient.uploadFile(remoteFilePath, fileContent);
-            this.plugin.processed();
-            this.plugin.log(`Uploaded: ${localFilePath} to ${remoteFilePath}`);
         } catch (error) {
-            console.error(`Error uploading ${localFilePath}:`, error);
+            console.error(`Error uploading ${filePath}:`, error);
         }
     }
 
@@ -170,6 +171,7 @@ export class Operations {
                     return;
                 }
                 this.plugin.processed();
+                this.newPrevDataFiles.deleted.push(path);
             } catch (error) {
                 console.error(`Delete failed for ${cleanPath}:`, error);
                 failedPaths.push(fullPath);
@@ -182,13 +184,15 @@ export class Operations {
                 if (!status.online) {
                     console.log(`Server offline for ${path}, skipping delete retry`);
                     this.plugin.processed();
+                    this.newPrevDataFiles.deleted.push(path);
                     return;
                 }
 
                 const response = await this.plugin.smartSyncClient.deleteFile(path);
                 if (response === 200 || response === 204 || response === 404) {
                     this.plugin.processed();
-                    console.log(`Retry successful: ${path}`);
+                    this.newPrevDataFiles.deleted.push(path);
+                    this.plugin.log(`Retry successful: ${path}`);
                 } else {
                     console.log(`Delete still failed for ${path}, status: ${response}`);
                 }
@@ -229,6 +233,7 @@ export class Operations {
                 await this.plugin.app.vault.adapter.trashSystem(file);
             }
             this.plugin.processed();
+            this.newPrevDataFiles.deleted.push(file);
         } catch (error) {
             console.error(`Error deleting local file ${file}:`, error);
         }
@@ -243,7 +248,6 @@ export class Operations {
             if (!response) {
                 throw new Error(`Failed to create remote directory ${path}`);
             }
-            this.plugin.processed();
         } catch (error) {
             console.error(`Error creating remote directory ${path}:`, error);
         }
@@ -504,7 +508,7 @@ export class Operations {
      * @param show
      * @returns
      */
-    async sync(controller: Controller, show = true) {
+    async sync(controller: Controller, show = true, postSync: PostSync = "check") {
         console.log("[SYNC] Starting sync, show:", show, "controller:", controller);
         if (this.plugin.prevData.error) {
             console.log("[SYNC] Blocked by error state");
@@ -526,6 +530,12 @@ export class Operations {
                 show && this.plugin.show(`Operation not possible, currently working on '${this.plugin.status}'`);
                 return;
             }
+
+            this.newPrevDataFiles = {
+                modifiedAdded: [],
+                deleted: []
+            }
+
             if (!this.plugin.fileTrees) {
                 show && this.plugin.show("Checking files before operation...");
                 const response = await this.check(show);
@@ -635,10 +645,42 @@ export class Operations {
             await Promise.all(operations);
             this.plugin.setStatus(Status.NONE);
 
-            show && this.plugin.show("Sync completed - checking again");
-            await this.plugin.saveState();
+            if (postSync === "check"){
+                show && this.plugin.show("Sync completed - checking again");
+                await this.plugin.saveState();
+                await this.check(true);
+            }
+            if (postSync === "prevSuccess"){
+                for (const filePath in this.newPrevDataFiles.modifiedAdded){
+                    const statPromise = this.plugin.app.vault.adapter.stat(filePath)
+                    const readPromise = this.plugin.app.vault.adapter.readBinary(filePath)
+                    const [stat, data] = await Promise.all([statPromise, readPromise]);
+                    if (!stat || !data){
+                        console.error("No stat or data available for postSync "+ postSync )
+                        continue;
+                    }
+                    
+                    this.plugin.prevData.files[filePath] = {
+                        hash: await sha256(data),
+                        size: stat.size,
+                        mtime: msToSeconds(stat.mtime)
+                    }
+                }
+                for (const filePath in this.newPrevDataFiles.deleted){
+                    delete this.plugin.prevData.files[filePath];
+                }
+                
+                const now = msToSeconds(Date.now())
 
-            await this.check(true);
+                this.plugin.prevData.timestamps = {
+                    ...this.plugin.prevData.timestamps,
+                    prevdataUpdate: now,
+                    lastFileSync: now,
+                    lastFullSync: now
+                }
+
+                this.plugin.savePrevData();
+            }
 
             // this.plugin.tempExcludedFiles = {};
 

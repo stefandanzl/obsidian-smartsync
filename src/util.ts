@@ -119,3 +119,7 @@ export function logNotice(message: string, ms?: number) {
     new Notice(message, duration);
     console.log(message);
 }
+
+export function msToSeconds(ms: number){
+    return Math.floor(ms / 1000)
+}

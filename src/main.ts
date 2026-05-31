@@ -259,10 +259,14 @@ export default class SmartSync extends Plugin {
                 const newExcept = this.compare.checkExistKey(this.fileTrees.localFiles.except, files);
 
                 this.prevData = {
-                    date: Date.now(),
                     error: this.prevData.error,
                     files,
                     except: newExcept,
+                    timestamps: {
+                        prevdataUpdate: Date.now(),
+                        lastFullSync: this.prevData.timestamps?.lastFullSync || 0,
+                        lastFileSync: this.prevData.timestamps?.lastFileSync || 0,
+                    },
                 };
 
                 await this.app.vault.adapter.write(this.prevPath, JSON.stringify(this.prevData, null, 2));

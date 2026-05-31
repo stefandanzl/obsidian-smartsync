@@ -66,6 +66,10 @@ export class ModSyncListener {
 		this.eventHandlers.modify = (file: TAbstractFile) => {
 			if (this.config?.eventTypes?.modify && file instanceof TFile) {
 				const normalizedPath = normalizePath(file.path);
+				const isExcluded = this.plugin.checksum.isExcluded(normalizedPath);
+				if (isExcluded) {
+					return;
+				}
 				this.plugin.log(`[MODIFY] ${normalizedPath}`);
 				this.debounceFileChange(normalizedPath, "modify");
 			}
@@ -104,7 +108,7 @@ export class ModSyncListener {
 				}
 
 				// Check if file is excluded
-				const isExcluded = this.plugin.checksum.isExcluded(path);
+				const isExcluded = this.plugin.checksum.isExcluded(normalizedPath);
 				if (isExcluded) {
 					// this.plugin.log(`[RAW]: File ${path} is excluded, skipping`);
 					return;
