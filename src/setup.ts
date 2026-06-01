@@ -233,7 +233,7 @@ export async function launcher(plugin: SmartSync) {
                 // plugin.show("✅ Check completed");
 
                 if (doSync) {
-                    plugin.notice = new Notice(`\n⏰ Starting sync in ${syncDelay} seconds... (click to abort)\n `, syncDelay * 1000);
+                    plugin.notice = new Notice(`\n⏰ Starting sync in ${syncDelay} seconds... \n  Click this to abort\n `, syncDelay * 1000);
 
                     // plugin.notice.messageEl.setHTMLUnsafe(`
                     //     <div style="cursor: pointer; padding: 8px; border: 1px solid var(--background-modifier-border); border-radius: 4px;">

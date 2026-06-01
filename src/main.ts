@@ -57,6 +57,8 @@ export default class SmartSync extends Plugin {
     lastFileEdited: string;
     lastModSync: number;
     sessionSynced: boolean;
+    reconnectInterval: number | null = null;
+    reconnectAttempts: number = 0;
 
     scheduledSync = {
         checkTimeoutId: null as number | null,
@@ -390,6 +392,7 @@ export default class SmartSync extends Plugin {
     }
 
     async setStatus(status: Status, show = true, text?: string) {
+        const oldStatus = this.status;
         this.status = status;
 
         // this.app.vault.fileMap
@@ -409,13 +412,85 @@ export default class SmartSync extends Plugin {
             setIcon(this.iconSpan, STATUS_ITEMS[status].lucide);
         }
 
+        // Process queue when transitioning to NONE
+        if (status === Status.NONE && oldStatus !== Status.NONE) {
+            if (this.modSyncListener) {
+                setTimeout(() => this.modSyncListener.processQueue(), 100);
+            }
+        }
+
+        // Schedule reconnect when transitioning to OFFLINE or ERROR
+        if ([Status.OFFLINE, Status.ERROR].includes(status) &&
+            ![Status.OFFLINE, Status.ERROR].includes(oldStatus)) {
+            this.scheduleReconnect();
+        }
+
+        // Clear reconnect when transitioning away from OFFLINE or ERROR
+        if (![Status.OFFLINE, Status.ERROR].includes(status) &&
+            [Status.OFFLINE, Status.ERROR].includes(oldStatus)) {
+            this.clearReconnect();
+        }
+
         if (this.modal) {
             this.modal.updateStatusIndicator();
         }
     }
 
+    /**
+     * Schedule periodic connection testing when offline with exponential backoff
+     */
+    private scheduleReconnect(): void {
+        if (this.reconnectInterval) return; // Already running
+
+        this.reconnectAttempts = 0;
+        this.startReconnectAttempt();
+    }
+
+    /**
+     * Start a single reconnect attempt with exponential backoff
+     */
+    private startReconnectAttempt(): void {
+        // Calculate delay with exponential backoff: 10s * 1.5^attempt, capped at 60s
+        const delay = Math.min(10000 * Math.pow(1.5, this.reconnectAttempts), 60000);
+        this.log(`Reconnect attempt ${this.reconnectAttempts + 1} in ${delay / 1000}s`);
+
+        this.reconnectInterval = window.setTimeout(async () => {
+            // Check if we're still offline/error
+            if (this.status !== Status.OFFLINE && this.status !== Status.ERROR) {
+                this.clearReconnect();
+                return;
+            }
+
+            this.log("Testing connection...");
+            const online = await this.operations.test(false);
+
+            if (online) {
+                this.log("Connection restored!");
+                this.clearReconnect();
+                this.setStatus(Status.NONE); // This triggers queue processing
+            } else {
+                // Increment attempts and schedule next retry
+                this.reconnectAttempts++;
+                this.startReconnectAttempt();
+            }
+        }, delay);
+    }
+
+    /**
+     * Clear the reconnect scheduler
+     */
+    private clearReconnect(): void {
+        if (this.reconnectInterval) {
+            window.clearTimeout(this.reconnectInterval);
+            this.reconnectInterval = null;
+            this.reconnectAttempts = 0;
+            this.log("Stopped reconnect scheduler");
+        }
+    }
+
     onunload() {
         window.clearInterval(this.intervalId);
+        this.clearReconnect();
     }
 
     async loadSettings() {

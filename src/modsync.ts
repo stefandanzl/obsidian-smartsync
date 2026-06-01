@@ -1,6 +1,7 @@
 import { TFile, TAbstractFile, normalizePath } from "obsidian";
 import SmartSyncPlugin from "./main";
-import { Status } from "./const";
+import { FileEntry, Status } from "./const";
+import { sha256 } from "./util";
 
 /**
  * Simple per-file modification sync with classic debounce
@@ -9,13 +10,25 @@ import { Status } from "./const";
  */
 
 export type FileChangeType = "create" | "modify" | "delete" | "rename" | "raw";
+export type FileQueueType = "create" | "modify" | "delete";
 
 export class ModSyncListener {
 	// Classic debounce timers - one per file
 	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-	// Retry timers for offline situations
+	// Retry timers for offline situations (legacy - will be phased out)
 	private retryTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+	// Queue system for managing sync operations
+	activeConcurrent: number = 0;
+	private queue: Array<{
+		path: string;
+		type: FileQueueType;
+		fileEntry?: FileEntry;
+	}> = [];
+	private maxConcurrent: number = 5;
+	private maxAttempts: number = 3;
+	private isProcessing: boolean = false;
 	private retryAttempts: Map<string, number> = new Map();
 
 	config = {
@@ -47,6 +60,136 @@ export class ModSyncListener {
 
 	constructor(private plugin: SmartSyncPlugin) {
 		this.setupEventHandlers();
+	}
+
+	/**
+	 * Enqueue a file for processing
+	 * Stores hash to avoid recalculation
+	 */
+	async enqueue(path: string, type: FileQueueType, fileEntry?: FileEntry): Promise<void> {
+		// Check for duplicates and update if exists
+		const existing = this.queue.find((item) => item.path === path);
+		if (existing) {
+			// Update with fresh data instead of skipping
+			if (fileEntry) {
+				existing.fileEntry = fileEntry;
+			}
+			existing.type = type;
+			this.retryAttempts.set(path, 0); // Reset attempts on fresh modification
+			this.plugin.log(`ModSync: Updated queued ${path} with fresh hash`);
+			return;
+		}
+
+		// Add new item with hash
+		this.queue.push({
+			path,
+			type,
+			fileEntry,
+		});
+
+		this.plugin.log(`ModSync: Enqueued ${path} (queue size: ${this.queue.length})`);
+		await this.processQueue();
+	}
+
+	/**
+	 * Process items from the queue
+	 * Uses isProcessing flag to prevent concurrent queue processing
+	 */
+	public async processQueue(): Promise<void> {
+		if (this.isProcessing) return;
+		if (!this.canProcessQueue()) return;
+
+		this.isProcessing = true;
+
+		try {
+			// Process up to maxConcurrent items
+			while (this.queue.length > 0 && this.activeConcurrent < this.maxConcurrent && this.canProcessQueue()) {
+				const item = this.queue.shift();
+				if (!item) break;
+
+				// Don't await - fire off concurrently
+				this.processItem(item).catch((err) => this.plugin.log(`ModSync: Item processing error: ${err}`));
+			}
+		} finally {
+			this.isProcessing = false;
+		}
+	}
+
+	/**
+	 * Check if we can process queue
+	 */
+	private canProcessQueue(): boolean {
+		return [Status.NONE, Status.AUTO].includes(this.plugin.status);
+	}
+
+	/**
+	 * Process individual item from queue
+	 */
+	private async processItem(item: { path: string; type: FileQueueType; fileEntry?: FileEntry }): Promise<void> {
+		// Check retry limit using Map
+		const attempts = this.retryAttempts.get(item.path) || 0;
+		if (attempts >= this.maxAttempts) {
+			this.plugin.log(`ModSync: Giving up on ${item.path} after ${attempts} attempts`);
+			this.plugin.show(`Failed to sync ${item.path} after ${attempts} attempts`);
+			return;
+		}
+
+		try {
+			this.increase();
+			if (item.type === "create" || item.type === "modify") {
+				await this.syncFile(item.path, item.fileEntry!, item.type);
+			} else if (item.type === "delete") {
+				await this.handleDeletion(item.path, item.type);
+			}
+		} finally {
+			this.decrease();
+			// Try to process more items
+			await this.processQueue();
+		}
+	}
+
+	/**
+	 * Increase active operation counter and set AUTO status
+	 */
+	private increase(): void {
+		this.activeConcurrent++;
+		if (this.activeConcurrent === 1) {
+			this.plugin.log("Should be AUTO");
+			this.plugin.setStatus(Status.AUTO);
+		}
+	}
+
+	/**
+	 * Decrease active operation counter and reset status when all complete
+	 */
+	private decrease(): void {
+		this.activeConcurrent = Math.max(0, this.activeConcurrent - 1);
+
+		if (this.activeConcurrent === 0 && this.plugin.status === Status.AUTO) {
+			this.plugin.setStatus(Status.NONE);
+		}
+	}
+
+	/**
+	 * Clear all queued items
+	 */
+	public clearQueue(): void {
+		const cleared = this.queue.length;
+		this.queue = [];
+		this.plugin.log(`ModSync: Cleared ${cleared} queued items`);
+	}
+
+	/**
+	 * Emergency reset - clear queue and reset counters
+	 */
+	public zero(): void {
+		this.activeConcurrent = 0;
+		this.queue = [];
+		this.isProcessing = false;
+		if (this.plugin.status === Status.AUTO) {
+			this.plugin.setStatus(Status.NONE);
+		}
+		this.plugin.log("ModSync: Emergency reset - queue cleared");
 	}
 
 	/**
@@ -225,7 +368,8 @@ export class ModSyncListener {
 			// Handle explicit delete events
 			if (type === "delete") {
 				if (!stat) {
-					await this.handleDeletion(path, type);
+					// await this.handleDeletion(path, type);
+					await this.enqueue(path, "delete");
 					return;
 				}
 				throw new Error("stat is available but should not");
@@ -235,7 +379,8 @@ export class ModSyncListener {
 			if (type === "raw" && !stat) {
 				// Event type delete has to be enabled for "raw" events triggering deletion
 				if (this.plugin.settings.modSyncConfig.eventTypes.delete) {
-					await this.handleDeletion(path, "raw");
+					// await this.handleDeletion(path, "raw");
+					await this.enqueue(path, "delete");
 				}
 				return;
 			}
@@ -248,7 +393,7 @@ export class ModSyncListener {
 
 			// Skip folders
 			if (stat.type === "folder") {
-				this.plugin.log(`[${type}]: Skipping folder ${path}`);
+				// this.plugin.log(`[${type}]: Skipping folder ${path}`);
 				return;
 			}
 
@@ -272,28 +417,27 @@ export class ModSyncListener {
 
 		// Calculate hash
 		const content = await this.plugin.app.vault.adapter.readBinary(path);
-		const { sha256 } = await import("./util");
 		const hash = await sha256(content);
 
 		// Hash comparison logic based on event type
-		let shouldSync = false;
+		let typeCast: FileQueueType | undefined;
 
 		switch (type) {
 			case "modify":
 			case "raw":
 				// Sync only if hash differs from prevData
 				if (prevEntry && prevEntry.hash !== hash) {
-					shouldSync = true;
+					typeCast = "modify";
 				} else if (!prevEntry) {
 					// New file, treat as create
-					shouldSync = true;
+					typeCast = "create";
 				}
 				break;
 
 			case "create":
 				// Sync only if file doesn't exist in prevData
 				if (!prevEntry) {
-					shouldSync = true;
+					typeCast = "create";
 				}
 				break;
 
@@ -302,19 +446,19 @@ export class ModSyncListener {
 				break;
 		}
 
-		if (!shouldSync) {
+		if (!typeCast) {
 			this.plugin.log(`[${type}]: Skipping ${path} - no actual change detected`);
 			return;
 		}
 
-		// Perform sync
-		await this.syncFile(path, hash, stat.size, mtime, type);
+		// Enqueue for sync (hash already calculated and validated)
+		await this.enqueue(path, typeCast, { hash, size: stat.size, mtime });
 	}
 
 	/**
 	 * Handle file deletion
 	 */
-	private async handleDeletion(path: string, type: FileChangeType): Promise<void> {
+	private async handleDeletion(path: string, type: FileQueueType): Promise<void> {
 		const prevEntry = this.plugin.prevData.files[path];
 
 		// Only sync if file existed in prevData
@@ -330,7 +474,7 @@ export class ModSyncListener {
 				this.plugin.setStatus(Status.NONE);
 				this.retryAttempts.clear();
 			} else {
-				this.scheduleRetry(path);
+				this.scheduleRetry(path, type);
 				return;
 			}
 		}
@@ -346,35 +490,28 @@ export class ModSyncListener {
 			await this.plugin.savePrevData();
 			this.plugin.log(`[${type}]: Deleted ${path}`);
 		} else {
-			this.scheduleRetry(path);
+			this.scheduleRetry(path, type);
 		}
 	}
 
 	/**
 	 * Sync file to server
 	 */
-	private async syncFile(
-		path: string,
-		hash: string,
-		size: number,
-		mtime: number,
-		type: FileChangeType
-	): Promise<void> {
+	private async syncFile(path: string, fileEntry: FileEntry, type: FileQueueType): Promise<void> {
 		// Check offline status before sync
 		if (this.plugin.status === Status.OFFLINE) {
 			const online = await this.plugin.operations.test(false, false);
 			if (online) {
 				this.plugin.setStatus(Status.NONE);
-				this.retryAttempts.clear();
 			} else {
-				this.scheduleRetry(path);
+				this.scheduleRetry(path, type, fileEntry);
 				return;
 			}
 		}
 
 		if (this.config.dryRun) {
 			this.plugin.log(
-				`[DRY RUN] [${type}]: Would upload: ${path} (${size} bytes, hash: ${hash.substring(0, 8)}...)`
+				`[DRY RUN] [${type}]: Would upload: ${path} (${fileEntry.size} bytes, hash: ${fileEntry.hash.substring(0, 8)}...)`
 			);
 			return;
 		}
@@ -386,46 +523,31 @@ export class ModSyncListener {
 
 			if (response) {
 				// Update prevData only after successful sync
-				this.plugin.prevData.files[path] = { hash, size, mtime };
+				this.plugin.prevData.files[path] = fileEntry;
 				await this.plugin.savePrevData();
 				this.plugin.log(`[${type}]: Successfully synced ${path}`);
 			} else {
-				// Sync failed - schedule retry
+				// Sync failed - re-queue with incremented attempts
 				this.plugin.setStatus(Status.OFFLINE);
-				this.scheduleRetry(path);
+				this.scheduleRetry(path, type, fileEntry);
 			}
 		} catch (error) {
+			// Error - re-queue with incremented attempts
 			console.error(`[${type}]: Error syncing ${path}:`, error);
 			this.plugin.show("ModSync Error");
 			this.plugin.setStatus(Status.ERROR);
+			this.scheduleRetry(path, type, fileEntry);
 		}
 	}
 
 	/**
 	 * Schedule retry with exponential backoff
 	 */
-	private scheduleRetry(path: string): void {
-		const attempt = (this.retryAttempts.get(path) || 0) + 1;
-		this.retryAttempts.set(path, attempt);
-
-		// Exponential backoff: 10s * 1.5^attempt, capped at 60s
-		const delay = Math.min(10000 * Math.pow(1.5, attempt), 60000);
-		this.plugin.log(`ModSync: Scheduling retry for ${path} in ${delay / 1000}s (attempt ${attempt})`);
-
-		// Clear existing retry timer
-		const existingTimer = this.retryTimers.get(path);
-		if (existingTimer) {
-			clearTimeout(existingTimer);
-		}
-
-		// Set new retry timer
-		const timer = setTimeout(async () => {
-			this.retryTimers.delete(path);
-			// Use "raw" for retries - it will determine the correct action based on file existence
-			await this.processFileChange(path, "raw");
-		}, delay);
-
-		this.retryTimers.set(path, timer);
+	private async scheduleRetry(path: string, type: FileQueueType, fileEntry?: FileEntry) {
+		// Re-queue with incremented attempts
+		const attempts = (this.retryAttempts.get(path) || 0) + 1;
+		this.retryAttempts.set(path, attempts);
+		await this.enqueue(path, type, fileEntry);
 	}
 
 	/**
