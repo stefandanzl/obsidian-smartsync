@@ -225,7 +225,76 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                 })
             );
 
-            
+        // Startup Sync Section
+        containerEl.createEl("h2", { text: "Startup Sync" });
+        containerEl.createEl("p", {
+            text: "Configure automatic synchronization when Obsidian starts."
+        });
+
+        new Setting(containerEl)
+            .setName("Enable Startup Sync")
+            .setDesc("Automatically check and sync when Obsidian starts")
+            .addToggle((toggle) =>
+                toggle.setValue(this.plugin.settings.startSync.enable).onChange(async (value) => {
+                    this.plugin.settings.startSync.enable = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
+        new Setting(containerEl)
+            .setName("Check Delay")
+            .setDesc("Delay before starting check (seconds)")
+            .addText((text) =>
+                text
+                    .setPlaceholder("30")
+                    .setValue(this.plugin.settings.startSync.delay.toString())
+                    .onChange(async (value) => {
+                        const parseVal = parseInt(value, 10);
+                        if (isNaN(parseVal)) {
+                            console.error("Failed to parse delay as number.");
+                            this.plugin.show("Invalid delay number");
+                        } else {
+                            this.plugin.settings.startSync.delay = parseVal;
+                            await this.plugin.saveSettings();
+                        }
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Do Sync After Check")
+            .setDesc("Whether to perform full sync after check completes")
+            .addToggle((toggle) =>
+                toggle.setValue(this.plugin.settings.startSync.doSync).onChange(async (value) => {
+                    this.plugin.settings.startSync.doSync = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
+        new Setting(containerEl)
+            .setName("Sync Delay")
+            .setDesc("Delay between check and sync (seconds)")
+            .addText((text) =>
+                text
+                    .setPlaceholder("10")
+                    .setValue(this.plugin.settings.startSync.syncDelay.toString())
+                    .onChange(async (value) => {
+                        const parseVal = parseInt(value, 10);
+                        if (isNaN(parseVal)) {
+                            console.error("Failed to parse sync delay as number.");
+                            this.plugin.show("Invalid sync delay number");
+                        } else {
+                            this.plugin.settings.startSync.syncDelay = parseVal;
+                            await this.plugin.saveSettings();
+                        }
+                    })
+            );
+
+        // Advanced ModSync Configuration Section - Only show when ModSync is enabled
+            containerEl.createEl("h2", { text: "ModSync Configuration" });
+            containerEl.createEl("p", {
+                text: "Configure automatic file synchronization behavior when changes are detected."
+            });
+
         new Setting(containerEl)
             .setName("Mod Sync")
             .setDesc("Enable Synchronization on modification")
@@ -239,13 +308,7 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                 })
             );
 
-        // Advanced ModSync Configuration Section - Only show when ModSync is enabled
         if (this.plugin.settings.modSync) {
-            containerEl.createEl("h2", { text: "ModSync Configuration" });
-            containerEl.createEl("p", {
-                text: "Configure automatic file synchronization behavior when changes are detected."
-            });
-
             // Event Types Configuration
             containerEl.createEl("h3", { text: "Event Types" });
             containerEl.createEl("p", {

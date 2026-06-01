@@ -383,6 +383,7 @@ export class FileTreeModal extends Modal {
                 cls: "smart-sync-empty",
                 text: "✓ No changes to sync",
             });
+            this.plugin.sessionSynced = true;
             return;
         }
 

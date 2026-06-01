@@ -193,6 +193,13 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
     dailyNotesTemplate: "",
     dailyNotesTimestamp: true,
 
+    startSync: {
+        enable: false,
+        delay: 30,
+        doSync: false,
+        syncDelay: 10
+    },
+
     debugMode: false,
 };
 
@@ -209,6 +216,13 @@ export interface ModSyncConfig {
     debounceDelay: number;
     dryRun: boolean;
     eventTypes: ModSyncEventTypes;
+}
+
+export interface StartSyncConfig {
+    enable: boolean;
+    delay: number;
+    doSync: boolean;
+    syncDelay: number;
 }
 
 export interface SmartSyncSettings {
@@ -233,6 +247,8 @@ export interface SmartSyncSettings {
     dailyNotesFormat: string;
     dailyNotesTemplate: string;
     dailyNotesTimestamp: boolean;
+
+    startSync: StartSyncConfig;
 
     debugMode: boolean;
 }

@@ -6,7 +6,7 @@ type SmartSync = SmartSyncPlugin;
 import { Compare } from "./compare";
 import { Checksum } from "./checksum";
 import { Operations } from "./operations";
-import { CliData, Platform, setIcon } from "obsidian";
+import { CliData, Platform, setIcon, Notice } from "obsidian";
 import { Status } from "./const";
 import { DailyNoteManager } from "./dailynote";
 
@@ -212,6 +212,58 @@ export async function launcher(plugin: SmartSync) {
             plugin.togglePause();
         },
     });
+
+    // Add abort startup sync command
+    plugin.addCommand({
+        id: "abort-start-sync",
+        name: "Abort Startup Sync",
+        callback: () => {
+            plugin.abortScheduledSync();
+        },
+    });
+
+    // Handle startup sync
+    if (plugin.settings.startSync.enable) {
+        const { delay, doSync, syncDelay } = plugin.settings.startSync;
+        // plugin.show(`⏰ Starting check in ${delay} seconds...`);
+        plugin.scheduledSync.checkTimeoutId = window.setTimeout(async () => {
+            // plugin.show("🔍 Starting automatic check...");
+            try {
+                await plugin.operations.check(false);
+                // plugin.show("✅ Check completed");
+
+                if (doSync) {
+                    plugin.notice = new Notice(`\n⏰ Starting sync in ${syncDelay} seconds... (click to abort)\n `, syncDelay * 1000);
+
+                    // plugin.notice.messageEl.setHTMLUnsafe(`
+                    //     <div style="cursor: pointer; padding: 8px; border: 1px solid var(--background-modifier-border); border-radius: 4px;">
+                    //         ⏰ Starting sync in ${syncDelay} seconds... (click to abort)
+                    //     </div>
+                    // `) 
+                    
+                    plugin.notice!.messageEl.onclick = (ev)=>{
+                        plugin.notice = new Notice("Startup Sync aborted.")
+                        plugin.abortScheduledSync()
+                    }
+                    
+                    plugin.scheduledSync.syncTimeoutId = window.setTimeout(async () => {
+                        plugin.show("🔄 Starting automatic sync...");
+                        try {
+                            await plugin.operations.fullSync();
+                            plugin.show("✅ Auto-sync completed");
+                            plugin.sessionSynced = true;
+                        } catch (error) {
+                            plugin.show(`❌ Auto-sync failed: ${error}`);
+                        }
+                    }, syncDelay * 1000);
+                } else {
+                    // plugin.sessionSynced = true;
+                }
+            } catch (error) {
+                plugin.show(`❌ Check failed: ${error}`);
+            }
+        }, delay * 1000);
+    }
 
     plugin.setStatus(Status.NONE);
     plugin.setClient();

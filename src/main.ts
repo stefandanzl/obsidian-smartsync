@@ -58,6 +58,11 @@ export default class SmartSync extends Plugin {
     lastModSync: number;
     sessionSynced: boolean;
 
+    scheduledSync = {
+        checkTimeoutId: null as number | null,
+        syncTimeoutId: null as number | null,
+    }
+
     notice: Notice;
     pause: boolean;
     isSyncing: boolean;
@@ -109,16 +114,17 @@ export default class SmartSync extends Plugin {
         // This prevents catching startup file loading events
         this.app.workspace.onLayoutReady(() => {
             console.warn("🚀 [SmartSync] Layout ready - Registering ModSync listeners NOW");
+            setTimeout(()=>{
+                // Initialize and register ModSync listeners AFTER layout is ready
+                if (this.settings.modSync) {
+                    this.setModSync();
+                }
 
-            // Initialize and register ModSync listeners AFTER layout is ready
-            if (this.settings.modSync) {
-                this.setModSync();
-            }
-
-            
-            if (this.settings.autoSync) {
-                this.setAutoSync();
-            }
+                
+                if (this.settings.autoSync) {
+                    this.setAutoSync();
+                }
+            }, 500);
         });
     }
 
@@ -293,6 +299,26 @@ export default class SmartSync extends Plugin {
             // this.prevDataSaveTimeoutId = null;
         } catch (error) {
             console.error("prevData   ", error);
+        }
+    }
+
+    abortScheduledSync() {
+        let aborted = false;
+
+        if (this.scheduledSync.checkTimeoutId !== null) {
+            clearTimeout(this.scheduledSync.checkTimeoutId);
+            this.scheduledSync.checkTimeoutId = null;
+            aborted = true;
+        }
+
+        if (this.scheduledSync.syncTimeoutId !== null) {
+            clearTimeout(this.scheduledSync.syncTimeoutId);
+            this.scheduledSync.syncTimeoutId = null;
+            aborted = true;
+        }
+
+        if (aborted) {
+            this.show("❌ Startup sync aborted");
         }
     }
 
