@@ -16,7 +16,7 @@ export class DiffModal extends Modal {
 		app: App,
 		public plugin: SmartSyncPlugin,
 		public filePath: string,
-		public location: Location
+		public location: Location | undefined
 	) {
 		super(app);
 	}

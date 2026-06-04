@@ -70,10 +70,10 @@ export default class SmartSync extends Plugin {
 	fileSelection: Record<
 		string,
 		{
-			location: Location;
+			location: Location | undefined;
 			diffType: DiffType;
 			selected: boolean;
-			explicitAction: ExplicitAction;
+			inverse?: boolean;
 		}
 	>;
 

@@ -2,7 +2,7 @@ import SmartSyncPlugin from "./main";
 import { SmartSyncClient } from "./smartSync";
 import { join, dirname, calcDuration, logNotice, msToSeconds, sha256 } from "./util";
 import { normalizePath } from "obsidian";
-import { Controller, FileEntry, FileList, FileTree, FileTrees, PostSync, Status, STATUS_ITEMS } from "./const";
+import { Controller, FileList, PostSync, Status, STATUS_ITEMS } from "./const";
 
 export class Operations {
 	newPrevDataFiles: {
@@ -486,41 +486,91 @@ export class Operations {
 	}
 
 	/**
-	 * Filter fileTrees to only include selected files
+	 * Count how many files will be synced based on controller and file selection
 	 */
-	private filterSelectedFiles(fileTrees: FileTrees): FileTrees {
-		const fileSelection = this.plugin.fileSelection;
+	countSyncableFiles(controller: Controller): number {
+		return Object.values(this.plugin.fileSelection)
+			.filter((s) => s.selected)
+			.filter((s) => s.location && controller[s.location]?.[s.diffType]).length;
+	}
 
-		if (!fileSelection || Object.keys(fileSelection).length === 0) {
-			// No selection filter, return original
-			return fileTrees;
-		}
+	/*
+	 * Perform all actual file actions the user has chosen
+	 */
+	private async executeSyncOperations(): Promise<void> {
+		const fileTrees = this.plugin.fileTrees;
 
-		const filterFileList = (fileList: FileList): FileList => {
-			const filtered: FileList = {};
-			for (const [path, hash] of Object.entries(fileList)) {
-				// Include file if fileSelection[path] is true or undefined (not in list = sync all)
-				const fileData = fileSelection[path];
-				if (!fileData || fileData.selected !== false) {
-					filtered[path] = hash;
+		const filesToDownload: FileList = {};
+		const filesToUpload: FileList = {};
+		const filesToDeleteRemote: FileList = {};
+		const filesToDeleteLocal: FileList = {};
+
+		for (const [filePath, selection] of Object.entries(this.plugin.fileSelection)) {
+			if (!selection.selected) continue;
+
+			if (!selection.location) continue;
+
+			if (selection.location === "local") {
+				if (selection.diffType === "added") {
+					if (selection.inverse) {
+						filesToDeleteLocal[filePath] = fileTrees.local.added[filePath];
+					} else {
+						filesToUpload[filePath] = fileTrees.local.added[filePath];
+					}
+				} else if (selection.diffType === "modified") {
+					if (selection.inverse) {
+						filesToDeleteLocal[filePath] = fileTrees.local.modified[filePath];
+					} else {
+						filesToUpload[filePath] = fileTrees.local.modified[filePath];
+					}
+				} else if (selection.diffType === "deleted") {
+					if (selection.inverse) {
+						filesToDownload[filePath] = fileTrees.local.deleted[filePath];
+					} else {
+						filesToDeleteRemote[filePath] = fileTrees.local.deleted[filePath];
+					}
+				} else if (selection.diffType === "except") {
+					if (selection.inverse) {
+						filesToDownload[filePath] = fileTrees.local.except[filePath];
+					} else {
+						filesToUpload[filePath] = fileTrees.local.except[filePath];
+					}
+				}
+			} else if (selection.location === "remote") {
+				if (selection.diffType === "added") {
+					if (selection.inverse) {
+						filesToDeleteRemote[filePath] = fileTrees.remote.added[filePath];
+					} else {
+						filesToDownload[filePath] = fileTrees.remote.added[filePath];
+					}
+				} else if (selection.diffType === "modified") {
+					if (selection.inverse) {
+						filesToDeleteRemote[filePath] = fileTrees.remote.modified[filePath];
+					} else {
+						filesToDownload[filePath] = fileTrees.remote.modified[filePath];
+					}
+				} else if (selection.diffType === "deleted") {
+					if (selection.inverse) {
+						filesToUpload[filePath] = fileTrees.remote.deleted[filePath];
+					} else {
+						filesToDeleteLocal[filePath] = fileTrees.remote.deleted[filePath];
+					}
+				} else if (selection.diffType === "except") {
+					if (selection.inverse) {
+						filesToUpload[filePath] = fileTrees.remote.except[filePath];
+					} else {
+						filesToDownload[filePath] = fileTrees.remote.except[filePath];
+					}
 				}
 			}
-			return filtered;
-		};
+		}
 
-		const filterFileTree = (fileTree: FileTree): FileTree => {
-			return {
-				added: filterFileList(fileTree.added),
-				deleted: filterFileList(fileTree.deleted),
-				modified: filterFileList(fileTree.modified),
-				except: filterFileList(fileTree.except),
-			};
-		};
-
-		return {
-			remote: filterFileTree(fileTrees.remote),
-			local: filterFileTree(fileTrees.local),
-		};
+		await Promise.all([
+			this.downloadFiles(filesToDownload),
+			this.uploadFiles(filesToUpload),
+			this.deleteFilesRemote(filesToDeleteRemote),
+			this.deleteFilesLocal(filesToDeleteLocal),
+		]);
 	}
 
 	/**
@@ -571,55 +621,11 @@ export class Operations {
 
 			this.plugin.setStatus(Status.SYNC);
 
-			// Filter fileTrees to only include selected files
-			const fileTreesSelected = this.filterSelectedFiles(this.plugin.fileTrees);
-
 			// Calculate total operations needed
-			const operationsToCount = [];
-
-			// Calculate total operations needed (explicit counting)
-			let total = 0;
-
-			// INTERIM START
-			// Count files that will actually be processed
-			for (const [_path, selection] of Object.entries(this.plugin.fileSelection)) {
-				// Skip unselected files
-				if (!selection.selected) continue;
-
-				// Count based on controller settings
-				if (controller.remote?.added && selection.location === "remote" && selection.diffType === "added") {
-					total++;
-				}
-				if (
-					controller.remote?.modified &&
-					selection.location === "remote" &&
-					selection.diffType === "modified"
-				) {
-					total++;
-				}
-				if (controller.remote?.deleted && selection.location === "remote" && selection.diffType === "deleted") {
-					total++;
-				}
-				if (controller.remote?.except && selection.location === "remote" && selection.diffType === "except") {
-					total++;
-				}
-				if (controller.local?.added && selection.location === "local" && selection.diffType === "added") {
-					total++;
-				}
-				if (controller.local?.modified && selection.location === "local" && selection.diffType === "modified") {
-					total++;
-				}
-				if (controller.local?.deleted && selection.location === "local" && selection.diffType === "deleted") {
-					total++;
-				}
-				if (controller.local?.except && selection.location === "local" && selection.diffType === "except") {
-					total++;
-				}
-			}
-			// INTERIM END
+			const total = this.countSyncableFiles(controller);
 
 			if (total === 0) {
-				if (Object.keys(fileTreesSelected.local.except).length > 0) {
+				if (Object.keys(this.plugin.fileTrees.local.except).length > 0) {
 					show &&
 						this.plugin.show("You have file sync exceptions. Clear them in SmartSync Control Panel.", 5000);
 				} else {
@@ -632,64 +638,9 @@ export class Operations {
 
 			show && this.plugin.show("Synchronising...");
 
-			const operations: Promise<void>[] = [];
+			// Execute sync operations based on file selection
+			await this.executeSyncOperations();
 
-			// Handle Remote operations
-			if (controller.remote) {
-				if (controller.remote.added === 1) {
-					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remote.added));
-				} else if (controller.remote.added === -1) {
-					operations.push(this.plugin.operations.deleteFilesRemote(fileTreesSelected.remote.added));
-				}
-
-				if (controller.remote.deleted === 1) {
-					operations.push(this.plugin.operations.deleteFilesLocal(fileTreesSelected.remote.deleted));
-				} else if (controller.remote.deleted === -1) {
-					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remote.deleted));
-				}
-
-				if (controller.remote.modified === 1) {
-					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remote.modified));
-				} else if (controller.remote.modified === -1) {
-					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remote.modified));
-				}
-
-				if (controller.remote.except === 1) {
-					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remote.except));
-				} else if (controller.remote.except === -1) {
-					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remote.except));
-				}
-			}
-
-			// Handle Local operations
-			if (controller.local) {
-				if (controller.local.added === 1) {
-					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.local.added));
-				} else if (controller.local.added === -1) {
-					operations.push(this.plugin.operations.deleteFilesLocal(fileTreesSelected.local.added));
-				}
-
-				if (controller.local.deleted === 1) {
-					operations.push(this.plugin.operations.deleteFilesRemote(fileTreesSelected.local.deleted));
-				} else if (controller.local.deleted === -1) {
-					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.local.deleted));
-				}
-
-				if (controller.local.modified === 1) {
-					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.local.modified));
-				} else if (controller.local.modified === -1) {
-					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.local.modified));
-				}
-
-				if (controller.local.except === 1) {
-					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.local.except));
-				} else if (controller.local.except === -1) {
-					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.local.except));
-				}
-			}
-
-			// Execute all operations concurrently
-			await Promise.all(operations);
 			this.plugin.setStatus(Status.NONE);
 
 			if (postSync === "check") {

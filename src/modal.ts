@@ -1,7 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { DiffModal } from "./diffModal";
-import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, DiffType, ExplicitAction } from "./const";
+import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, DiffType } from "./const";
 import { dirname } from "./util";
 
 export class FileTreeModal extends Modal {
@@ -201,10 +201,10 @@ export class FileTreeModal extends Modal {
 					// Only add if not already present (preserve existing selections)
 					if (!this.plugin.fileSelection[path]) {
 						this.plugin.fileSelection[path] = {
-							location: locationKey,
+							location: typeKey === "except" ? undefined : locationKey,
 							diffType: typeKey,
 							selected: true, // Default to selected
-							explicitAction: undefined,
+							inverse: undefined,
 						};
 					}
 				}
@@ -358,7 +358,7 @@ export class FileTreeModal extends Modal {
 
 	private toggleActionSelects(btn?: HTMLButtonElement) {
 		this.actionsVisible = !this.actionsVisible;
-		this.fileTreeDiv.querySelectorAll(".smart-sync-action-select").forEach((el) => {
+		this.fileTreeDiv.querySelectorAll(".smart-sync-action-select, .smart-sync-inverse-checkbox").forEach((el) => {
 			el.toggleClass("hidden", !this.actionsVisible);
 		});
 		const label = this.actionsVisible ? "Hide Individual Actions" : "Show Individual Actions";
@@ -461,10 +461,11 @@ export class FileTreeModal extends Modal {
 		this.fileTreeDiv.scrollTop = this.plugin.lastScrollPosition;
 	}
 
-	private renderFileRow(container: HTMLElement, path: string, _location: Location, _type: DiffType) {
+	private renderFileRow(container: HTMLElement, path: string, _location: Location, type: DiffType) {
 		const isSelected = this.plugin.fileSelection[path]?.selected === true;
+		const isConflict = type === "except";
 		const row = container.createDiv({
-			cls: ["smart-sync-file-row", isSelected ? "selected" : ""],
+			cls: ["smart-sync-file-row", isConflict ? "smart-sync-conflict-row" : "", isSelected ? "selected" : ""],
 			attr: { "data-path": path },
 		});
 
@@ -502,32 +503,19 @@ export class FileTreeModal extends Modal {
 			fileEl.addEventListener("click", () => this.openFile(path));
 		}
 
-		// Explicit action dropdown (now to the right of path)
-		const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
-		actionSelect.addClass("hidden");
-		const blankOption = actionSelect.createEl("option", { value: "", text: "" });
-		actionSelect.createEl("option", { value: "push", text: "⬆️ Push" });
-		actionSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
-
-		const currentAction = this.plugin.fileSelection[path]?.explicitAction;
-		if (currentAction) {
-			actionSelect.value = currentAction;
-		} else {
-			blankOption.selected = true;
-		}
-
-		actionSelect.addEventListener("change", (e) => {
-			const action = (e.target as HTMLSelectElement).value as ExplicitAction;
+		// Inverse checkbox (inverts the default action)
+		const inverseCheckbox = row.createDiv({ cls: "smart-sync-inverse-checkbox" });
+		inverseCheckbox.addClass("hidden");
+		const isInverse = this.plugin.fileSelection[path]?.inverse === true;
+		inverseCheckbox.innerHTML = isInverse ? "🔄" : "➡️";
+		inverseCheckbox.addEventListener("click", (e) => {
+			e.stopPropagation();
 			if (this.plugin.fileSelection[path]) {
-				if (action) {
-					this.plugin.fileSelection[path].explicitAction = action;
-				} else {
-					delete this.plugin.fileSelection[path].explicitAction;
-				}
+				const currentInverse = this.plugin.fileSelection[path].inverse === true;
+				this.plugin.fileSelection[path].inverse = currentInverse ? undefined : true;
+				inverseCheckbox.innerHTML = currentInverse ? "➡️" : "🔄";
 			}
 		});
-
-		actionSelect.addEventListener("click", (e) => e.stopPropagation());
 
 		// Action menu button (three dots)
 		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
@@ -576,32 +564,31 @@ export class FileTreeModal extends Modal {
 			fileEl.addEventListener("click", () => this.openFile(path));
 		}
 
-		// Conflict resolution dropdown
-		const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
-		// actionSelect.addClass("hidden");
-		const blankOption = actionSelect.createEl("option", { value: "", text: "Choose action…" });
-		actionSelect.createEl("option", { value: "push", text: "⬆️ Keep Local" });
-		actionSelect.createEl("option", { value: "pull", text: "⬇️ Keep Remote" });
+		// Conflict resolution dropdown (choose location)
+		const locationSelect = row.createEl("select", { cls: "smart-sync-action-select" });
+		const blankOption = locationSelect.createEl("option", { value: "", text: "Choose location…" });
+		locationSelect.createEl("option", { value: "local", text: "⬆️ Keep Local" });
+		locationSelect.createEl("option", { value: "remote", text: "⬇️ Keep Remote" });
 
-		const currentAction = this.plugin.fileSelection[path]?.explicitAction;
-		if (currentAction) {
-			actionSelect.value = currentAction;
+		const currentLocation = this.plugin.fileSelection[path]?.location;
+		if (currentLocation) {
+			locationSelect.value = currentLocation;
 		} else {
 			blankOption.selected = true;
 		}
 
-		actionSelect.addEventListener("change", (e) => {
-			const action = (e.target as HTMLSelectElement).value as ExplicitAction;
+		locationSelect.addEventListener("change", (e) => {
+			const location = (e.target as HTMLSelectElement).value as Location | "";
 			if (this.plugin.fileSelection[path]) {
-				if (action) {
-					this.plugin.fileSelection[path].explicitAction = action;
+				if (location) {
+					this.plugin.fileSelection[path].location = location as Location;
 				} else {
-					delete this.plugin.fileSelection[path].explicitAction;
+					this.plugin.fileSelection[path].location = undefined;
 				}
 			}
 		});
 
-		actionSelect.addEventListener("click", (e) => e.stopPropagation());
+		locationSelect.addEventListener("click", (e) => e.stopPropagation());
 
 		// Action menu button (three dots)
 		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
@@ -727,7 +714,7 @@ export class FileTreeModal extends Modal {
 		this.app.workspace.openLinkText(path, "", "tab");
 	}
 
-	private showDiff(path: string, location: Location) {
+	private showDiff(path: string, location: Location | undefined) {
 		new DiffModal(this.app, this.plugin, path, location).open();
 	}
 

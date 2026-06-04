@@ -106,7 +106,7 @@ export type Path = string;
 export type Hash = string;
 export type Location = "remote" | "local";
 export type DiffType = "added" | "deleted" | "modified" | "except";
-export type SyncAction = 1 | -1 | undefined;
+export type SyncAction = 1 | -1;
 
 export type ExplicitAction = "push" | "pull" | undefined;
 
