@@ -105,9 +105,10 @@ export const STATUS_ITEMS: Record<Status, StatusItem> = {
 export type Path = string;
 export type Hash = string;
 export type Location = "remoteFiles" | "localFiles";
-export type Type = "added" | "deleted" | "modified" | "except";
+export type DiffType = "added" | "deleted" | "modified" | "except";
+export type SyncAction = 1 | -1 | undefined;
 
-export type ExplicitAction = "push" | "pull";
+export type ExplicitAction = "push" | "pull" | undefined;
 
 export type FileEntry = {
 	hash: string;
@@ -144,17 +145,17 @@ export type PostSync = "check" | "prevSuccess" | "saveAndCheck" | "none";
 
 // This is used to build custom functionality with the sync function like inverse actions
 export type Controller = {
-    remote: {
-        added?: 1 | -1;
-        deleted?: 1 | -1;
-        modified?: 1 | -1;
-        except?: 1 | -1;
+    remote?: {
+        added?: SyncAction;
+        deleted?: SyncAction;
+        modified?: SyncAction;
+        except?: SyncAction;
     };
-    local: {
-        added?: 1 | -1;
-        deleted?: 1 | -1;
-        modified?: 1 | -1;
-        except?: 1 | -1;
+    local?: {
+        added?: SyncAction;
+        deleted?: SyncAction;
+        modified?: SyncAction;
+        except?: SyncAction;
     };
 };
 

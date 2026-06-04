@@ -17,7 +17,7 @@ import {
     FileTrees,
     Hash,
     Location,
-    Type,
+    DiffType,
     ExplicitAction,
 } from "./const";
 import { DailyNoteManager } from "./dailynote";
@@ -45,7 +45,6 @@ export default class SmartSync extends Plugin {
     showModal: boolean;
     smartSyncClient: SmartSyncClient;
     fileTrees: FileTrees;
-    fullFileTrees: FileTrees;
     allFiles: {
         local: FileList;
         remote: FileList;
@@ -68,18 +67,17 @@ export default class SmartSync extends Plugin {
     notice: Notice;
     pause: boolean;
     isSyncing: boolean;
-    selectedFiles: Record<
+    fileSelection: Record<
         string,
         {
             location: Location;
-            type: Type;
-            hash: Hash;
+            diffType: DiffType;
             selected: boolean;
+            explicitAction: ExplicitAction;
         }
     >;
 
     mobile: boolean;
-    fileExplicitActions: Map<string, ExplicitAction> = new Map();
     localFiles: FileList;
     remoteFiles: FileList;
     hashStats: {
@@ -104,7 +102,7 @@ export default class SmartSync extends Plugin {
         string,
         {
             location: Location;
-            type: Type;
+            diffType: DiffType;
             hash: Hash;
         }
     >;
@@ -252,18 +250,18 @@ export default class SmartSync extends Plugin {
 
                 const { files, end } = await this.checksum.generateLocalHashTree(false);
 
-                console.log("selectedFiles: ", this.selectedFiles);
+                console.log("fileSelection: ", this.fileSelection);
 
                 // Preserve old hashes for files where selected is false
-                Object.keys(this.selectedFiles).forEach((path) => {
-                    if (this.selectedFiles[path].selected === false) {
+                for (const path of Object.keys(this.fileSelection)) {
+                    if (this.fileSelection[path].selected === false) {
                         if (path in this.prevData.files) {
                             files[path] = this.prevData.files[path];
                         } else {
                             delete files[path];
                         }
                     }
-                });
+                }
 
                 const newExcept = this.compare.checkExistKey(this.fileTrees.localFiles.except, files);
 
@@ -451,7 +449,7 @@ export default class SmartSync extends Plugin {
      */
     private startReconnectAttempt(): void {
         // Calculate delay with exponential backoff: 10s * 1.5^attempt, capped at 60s
-        const delay = Math.min(10000 * Math.pow(1.5, this.reconnectAttempts), 60000);
+        const delay = Math.min(10000 * Math.pow(1.5, this.reconnectAttempts), 30000);
         this.log(`Reconnect attempt ${this.reconnectAttempts + 1} in ${delay / 1000}s`);
 
         this.reconnectInterval = window.setTimeout(async () => {

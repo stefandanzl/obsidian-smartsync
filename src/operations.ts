@@ -372,8 +372,6 @@ export class Operations {
 
             const ok = this.dangerCheck();
 
-            this.plugin.fullFileTrees = structuredClone(this.plugin.fileTrees);
-
             // Calculate total time
             stats.totalTime = Date.now() - stats.startTime;
 
@@ -442,19 +440,18 @@ export class Operations {
         this.plugin.allFiles.local = localFiles.files;
         this.plugin.allFiles.remote = remoteFiles.files;
         this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
-        this.plugin.fullFileTrees = structuredClone(this.plugin.fileTrees);
-        
+
         const saveableFiles: any = {...localFiles.files};
 
-        Object.keys(this.plugin.selectedFiles).forEach((path) => {
-            if (this.plugin.selectedFiles[path].selected === false) {
+        for (const path of Object.keys(this.plugin.fileSelection)) {
+            if (this.plugin.fileSelection[path].selected === false) {
                 if (path in this.plugin.prevData.files) {
                     saveableFiles[path] = this.plugin.prevData.files[path];  // Keep old state
                 } else {
                     delete saveableFiles[path];  // Remove if wasn't in prevData
                 }
             }
-        });
+        }
 
         const newExcept = this.plugin.compare.checkExistKey(this.plugin.fileTrees.localFiles.except, saveableFiles);
 
@@ -480,52 +477,12 @@ export class Operations {
     }
 
     /**
-     * Apply explicit user actions for conflict resolution
-     * Moves files from 'except' to appropriate category based on user choice
-     */
-    private applyExplicitActions(fileTrees: FileTrees): void {
-        const explicitActions = this.plugin.fileExplicitActions;
-        if (!explicitActions || explicitActions.size === 0) {
-            return;
-        }
-
-        // Track processed actions to clear them
-        const processedPaths: string[] = [];
-
-        explicitActions.forEach((action, path) => {
-            // Only process if the file is still in 'except' (conflict)
-            if (fileTrees.localFiles.except[path] && fileTrees.remoteFiles.except[path]) {
-                const hash = fileTrees.localFiles.except[path];
-
-                if (action === "push") {
-                    // Keep local version: move from except to localFiles.modified
-                    fileTrees.localFiles.modified[path] = hash;
-                    delete fileTrees.localFiles.except[path];
-                    delete fileTrees.remoteFiles.except[path];
-                    this.plugin.log(`[Explicit Action] PUSH (keep local): ${path}`);
-                } else if (action === "pull") {
-                    // Keep remote version: move from except to remoteFiles.modified
-                    fileTrees.remoteFiles.modified[path] = hash;
-                    delete fileTrees.localFiles.except[path];
-                    delete fileTrees.remoteFiles.except[path];
-                    this.plugin.log(`[Explicit Action] PULL (keep remote): ${path}`);
-                }
-
-                processedPaths.push(path);
-            }
-        });
-
-        // Clear processed actions
-        processedPaths.forEach((path) => explicitActions.delete(path));
-    }
-
-    /**
      * Filter fileTrees to only include selected files
      */
     private filterSelectedFiles(fileTrees: FileTrees): FileTrees {
-        const selectedFiles = this.plugin.selectedFiles;
+        const fileSelection = this.plugin.fileSelection;
 
-        if (!selectedFiles || Object.keys(selectedFiles).length === 0) {
+        if (!fileSelection || Object.keys(fileSelection).length === 0) {
             // No selection filter, return original
             return fileTrees;
         }
@@ -533,8 +490,8 @@ export class Operations {
         const filterFileList = (fileList: FileList): FileList => {
             const filtered: FileList = {};
             for (const [path, hash] of Object.entries(fileList)) {
-                // Include file if selectedFiles[path] is true or undefined (not in list = sync all)
-                const fileData = selectedFiles[path];
+                // Include file if fileSelection[path] is true or undefined (not in list = sync all)
+                const fileData = fileSelection[path];
                 if (!fileData || fileData.selected !== false) {
                     filtered[path] = hash;
                 }
@@ -601,9 +558,6 @@ export class Operations {
             }
 
             this.plugin.setStatus(Status.SYNC);
-
-            // Handle explicit conflict actions before filtering
-            this.applyExplicitActions(this.plugin.fileTrees);
 
             // Filter fileTrees to only include selected files
             const fileTreesSelected = this.filterSelectedFiles(this.plugin.fileTrees);
@@ -734,9 +688,9 @@ export class Operations {
                     lastFullSync: now
                 }
 
-                this.plugin.savePrevData();
+                await this.plugin.savePrevData();
             } else if (postSync === "saveAndCheck"){
-                this.saveAndCheck()
+                await this.saveAndCheck()
             }
             this.plugin.sessionSynced = true;
             // this.plugin.tempExcludedFiles = {};
@@ -848,7 +802,6 @@ export class Operations {
     dangerCheck() {
         const max = 15;
         let counter = 0;
-        delete this.plugin.fileTrees.localFiles.deleted[".obsidian/"];
 
         Object.keys(this.plugin.fileTrees.localFiles.deleted).forEach((v) => {
             if (v.startsWith(".obsidian")) {

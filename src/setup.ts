@@ -18,7 +18,7 @@ export async function launcher(plugin: SmartSync) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     plugin.settingPrivate = (this.app as any).setting;
-    plugin.selectedFiles = {};
+    plugin.fileSelection = {};
 
     plugin.compare = new Compare(plugin);
     plugin.checksum = new Checksum(plugin);

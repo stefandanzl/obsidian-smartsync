@@ -1,7 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { DiffModal } from "./diffModal";
-import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, Type, ExplicitAction } from "./const";
+import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, DiffType, ExplicitAction } from "./const";
 import { dirname } from "./util";
 
 export class FileTreeModal extends Modal {
@@ -141,23 +141,23 @@ export class FileTreeModal extends Modal {
 
     private toggleSelectAll(btn: HTMLButtonElement) {
         const allPaths = this.getAllFilePaths();
-        const allSelected = allPaths.length > 0 && allPaths.every((path) => this.plugin.selectedFiles[path]?.selected === true);
+        const allSelected = allPaths.length > 0 && allPaths.every((path) => this.plugin.fileSelection[path]?.selected === true);
 
         if (allSelected) {
             // Deselect all
-            allPaths.forEach((path) => {
-                if (this.plugin.selectedFiles[path]) {
-                    this.plugin.selectedFiles[path].selected = false;
+            for (const path of allPaths) {
+                if (this.plugin.fileSelection[path]) {
+                    this.plugin.fileSelection[path].selected = false;
                 }
-            });
+            }
             btn.textContent = "☑️ Select All";
         } else {
             // Select all
-            allPaths.forEach((path) => {
-                if (this.plugin.selectedFiles[path]) {
-                    this.plugin.selectedFiles[path].selected = true;
+            for (const path of allPaths) {
+                if (this.plugin.fileSelection[path]) {
+                    this.plugin.fileSelection[path].selected = true;
                 }
-            });
+            }
             btn.textContent = "☐ Select None";
         }
         this.renderFileTrees();
@@ -165,49 +165,49 @@ export class FileTreeModal extends Modal {
     }
 
     private toggleFileSelection(path: string) {
-        if (this.plugin.selectedFiles[path]) {
-            this.plugin.selectedFiles[path].selected = !this.plugin.selectedFiles[path].selected;
+        if (this.plugin.fileSelection[path]) {
+            this.plugin.fileSelection[path].selected = !this.plugin.fileSelection[path].selected;
         }
         this.updateSyncButton();
     }
 
     private updateSyncButton() {
-        const count = Object.values(this.plugin.selectedFiles).filter((v) => v.selected === true).length;
+        const count = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
         this.syncButton.textContent = `🔄 Sync (${count})`;
     }
 
     private initializeSelectedFiles() {
-        if (!this.plugin.fullFileTrees) return;
+        if (!this.plugin.fileTrees) return;
 
-        // First, collect all current paths from fullFileTrees
+        // First, collect all current paths from fileTrees
         const currentPaths = new Set<string>();
         const locations: (keyof FileTrees)[] = ["localFiles", "remoteFiles"];
         const types: (keyof FileTree)[] = ["added", "modified", "deleted", "except"];
 
-        locations.forEach((locationKey) => {
-            types.forEach((typeKey) => {
-                const files = this.plugin.fullFileTrees![locationKey][typeKey];
-                Object.entries(files).forEach(([path, fileEntry]) => {
+        for (const locationKey of locations) {
+            for (const typeKey of types) {
+                const files = this.plugin.fileTrees[locationKey][typeKey];
+                for (const [path] of Object.entries(files)) {
                     currentPaths.add(path);
                     // Only add if not already present (preserve existing selections)
-                    if (!this.plugin.selectedFiles[path]) {
-                        this.plugin.selectedFiles[path] = {
+                    if (!this.plugin.fileSelection[path]) {
+                        this.plugin.fileSelection[path] = {
                             location: locationKey,
-                            type: typeKey,
-                            hash: fileEntry.hash,
+                            diffType: typeKey,
                             selected: true, // Default to selected
+                            explicitAction: undefined,
                         };
                     }
-                });
-            });
-        });
-
-        // Remove entries for files that are no longer in fullFileTrees
-        Object.keys(this.plugin.selectedFiles).forEach((path) => {
-            if (!currentPaths.has(path)) {
-                delete this.plugin.selectedFiles[path];
+                }
             }
-        });
+        }
+
+        // Remove entries for files that are no longer in fileTrees
+        for (const path of Object.keys(this.plugin.fileSelection)) {
+            if (!currentPaths.has(path)) {
+                delete this.plugin.fileSelection[path];
+            }
+        }
     }
 
     updateStatusIndicator() {
@@ -219,10 +219,10 @@ export class FileTreeModal extends Modal {
 
     private getAllFilePaths(): string[] {
         const paths: string[] = [];
-        if (!this.plugin.fullFileTrees) return paths;
+        if (!this.plugin.fileTrees) return paths;
 
         ["remoteFiles", "localFiles"].forEach((location) => {
-            const locationData = this.plugin.fullFileTrees![location as keyof FileTrees];
+            const locationData = this.plugin.fileTrees[location as keyof FileTrees];
             ["added", "deleted", "modified"].forEach((type) => {
                 Object.keys(locationData[type as keyof FileTree]).forEach((path) => {
                     paths.push(path);
@@ -312,7 +312,7 @@ export class FileTreeModal extends Modal {
     }
 
     private async syncSelected() {
-        const selectedCount = Object.values(this.plugin.selectedFiles).filter((v) => v.selected === true).length;
+        const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
         if (selectedCount === 0) {
             new Notice("No files selected");
             return;
@@ -321,13 +321,13 @@ export class FileTreeModal extends Modal {
     }
 
     private async pushSelected() {
-        const selectedCount = Object.values(this.plugin.selectedFiles).filter((v) => v.selected === true).length;
+        const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
         new Notice(`Pushing ${selectedCount} files`);
         this.plugin.operations.push();
     }
 
     private async pullSelected() {
-        const selectedCount = Object.values(this.plugin.selectedFiles).filter((v) => v.selected === true).length;
+        const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
         new Notice(`Pulling ${selectedCount} files`);
         this.plugin.operations.pull();
     }
@@ -365,16 +365,16 @@ export class FileTreeModal extends Modal {
         this.initializeSelectedFiles();
         this.fileTreeDiv.empty();
 
-        this.plugin.log("=== Full Filetrees:===");
-        this.plugin.log(JSON.stringify(this.plugin.fullFileTrees, null, 2));
+        this.plugin.log("=== Filetrees:===");
+        this.plugin.log(JSON.stringify(this.plugin.fileTrees, null, 2));
 
-        if (!this.plugin.fullFileTrees) {
+        if (!this.plugin.fileTrees) {
             this.fileTreeDiv.createEl("p", { text: "Loading...", cls: "smart-sync-loading" });
             return;
         }
 
         const hasAnyChanges = ["remoteFiles", "localFiles"].some((location) => {
-            const locationData = this.plugin.fullFileTrees![location as keyof FileTrees];
+            const locationData = this.plugin.fileTrees[location as keyof FileTrees];
             return Object.values(locationData).some((section) => Object.keys(section).length > 0);
         });
 
@@ -400,7 +400,7 @@ export class FileTreeModal extends Modal {
         ];
 
         locations.forEach(({ key, title, icon }) => {
-            const locationData = this.plugin.fullFileTrees![key];
+            const locationData = this.plugin.fileTrees[key];
             const hasChanges = Object.values(locationData).some((section) => Object.keys(section).length > 0);
 
             if (!hasChanges) return;
@@ -427,7 +427,7 @@ export class FileTreeModal extends Modal {
         });
 
         // ============= CONFLICTS SECTION =============
-        const conflictFiles = this.plugin.fullFileTrees!.localFiles.except;
+        const conflictFiles = this.plugin.fileTrees.localFiles.except;
         const hasConflicts = Object.keys(conflictFiles).length > 0;
 
         if (hasConflicts) {
@@ -452,8 +452,8 @@ export class FileTreeModal extends Modal {
         this.fileTreeDiv.scrollTop = this.plugin.lastScrollPosition;
     }
 
-    private renderFileRow(container: HTMLElement, path: string, _location: Location, _type: Type) {
-        const isSelected = this.plugin.selectedFiles[path]?.selected === true;
+    private renderFileRow(container: HTMLElement, path: string, _location: Location, _type: DiffType) {
+        const isSelected = this.plugin.fileSelection[path]?.selected === true;
         const row = container.createDiv({
             cls: ["smart-sync-file-row", isSelected ? "selected" : ""],
             attr: { "data-path": path },
@@ -465,7 +465,7 @@ export class FileTreeModal extends Modal {
         checkbox.addEventListener("click", (e) => {
             e.stopPropagation();
             this.toggleFileSelection(path);
-            const nowSelected = this.plugin.selectedFiles[path]?.selected === true;
+            const nowSelected = this.plugin.fileSelection[path]?.selected === true;
             checkbox.innerHTML = nowSelected ? "☑️" : "☐";
             row.toggleClass("selected", nowSelected);
         });
@@ -499,7 +499,7 @@ export class FileTreeModal extends Modal {
         actionSelect.createEl("option", { value: "push", text: "⬆️ Push" });
         actionSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
 
-        const currentAction = this.plugin.fileExplicitActions.get(path);
+        const currentAction = this.plugin.fileSelection[path]?.explicitAction;
         if (currentAction) {
             actionSelect.value = currentAction;
         } else {
@@ -508,10 +508,12 @@ export class FileTreeModal extends Modal {
 
         actionSelect.addEventListener("change", (e) => {
             const action = (e.target as HTMLSelectElement).value as ExplicitAction;
-            if (action) {
-                this.plugin.fileExplicitActions.set(path, action);
-            } else {
-                this.plugin.fileExplicitActions.delete(path);
+            if (this.plugin.fileSelection[path]) {
+                if (action) {
+                    this.plugin.fileSelection[path].explicitAction = action;
+                } else {
+                    delete this.plugin.fileSelection[path].explicitAction;
+                }
             }
         });
 
@@ -525,7 +527,7 @@ export class FileTreeModal extends Modal {
     }
 
     private renderConflictRow(container: HTMLElement, path: string) {
-        const isSelected = this.plugin.selectedFiles[path]?.selected === true;
+        const isSelected = this.plugin.fileSelection[path]?.selected === true;
         const row = container.createDiv({
             cls: ["smart-sync-file-row", "smart-sync-conflict-row", isSelected ? "selected" : ""],
             attr: { "data-path": path },
@@ -537,7 +539,7 @@ export class FileTreeModal extends Modal {
         checkbox.addEventListener("click", (e) => {
             e.stopPropagation();
             this.toggleFileSelection(path);
-            const nowSelected = this.plugin.selectedFiles[path]?.selected === true;
+            const nowSelected = this.plugin.fileSelection[path]?.selected === true;
             checkbox.innerHTML = nowSelected ? "☑️" : "☐";
             row.toggleClass("selected", nowSelected);
         });
@@ -570,7 +572,7 @@ export class FileTreeModal extends Modal {
         actionSelect.createEl("option", { value: "push", text: "⬆️ Keep Local" });
         actionSelect.createEl("option", { value: "pull", text: "⬇️ Keep Remote" });
 
-        const currentAction = this.plugin.fileExplicitActions.get(path);
+        const currentAction = this.plugin.fileSelection[path]?.explicitAction;
         if (currentAction) {
             actionSelect.value = currentAction;
         } else {
@@ -579,10 +581,12 @@ export class FileTreeModal extends Modal {
 
         actionSelect.addEventListener("change", (e) => {
             const action = (e.target as HTMLSelectElement).value as ExplicitAction;
-            if (action) {
-                this.plugin.fileExplicitActions.set(path, action);
-            } else {
-                this.plugin.fileExplicitActions.delete(path);
+            if (this.plugin.fileSelection[path]) {
+                if (action) {
+                    this.plugin.fileSelection[path].explicitAction = action;
+                } else {
+                    delete this.plugin.fileSelection[path].explicitAction;
+                }
             }
         });
 
@@ -603,7 +607,7 @@ export class FileTreeModal extends Modal {
         const items = [
             { label: "📂 Open in Explorer", action: () => this.openInExplorer(path) },
 
-            { label: "🔍 Show Diff", action: () => this.showDiff(path, this.plugin.selectedFiles[path]?.location) },
+            { label: "🔍 Show Diff", action: () => this.showDiff(path, this.plugin.fileSelection[path]?.location) },
         ];
         if (!path.startsWith(this.app.vault.configDir)) {
             items.unshift({ label: "📝 Open in Obsidian", action: () => this.openFile(path) });
