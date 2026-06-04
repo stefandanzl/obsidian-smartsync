@@ -25,7 +25,7 @@ import { DailyOfflineModal } from "./dailyModal";
 
 export default class SmartSync extends Plugin {
 	message: string | Array<string[]> | string[] | unknown[];
-	settings: SmartSyncSettings;
+	declare settings: SmartSyncSettings;
 	compare: Compare;
 	checksum: Checksum;
 	operations: Operations;

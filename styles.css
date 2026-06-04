@@ -307,77 +307,6 @@
     background: var(--background-modifier-hover);
 }
 
-/* Dropdown (floating) */
-.smart-sync-dropdown {
-    position: fixed;
-    z-index: 1000;
-}
-
-.smart-sync-dropdown-content {
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-    min-width: 180px;
-    width: 180px;
-    overflow: hidden;
-    display: none;
-}
-
-.smart-sync-dropdown.open .smart-sync-dropdown-content {
-    display: block;
-}
-
-.smart-sync-dropdown-item {
-    width: 100%;
-    padding: 12px 16px;
-    text-align: left;
-    background: transparent;
-    border: none;
-    color: var(--text-normal);
-    font-size: var(--font-ui-small);
-    cursor: pointer;
-    transition: background 0.15s ease;
-}
-
-.smart-sync-dropdown-item:hover {
-    background: var(--background-modifier-hover);
-}
-
-/* Context Menu (floating) */
-.smart-sync-context-menu {
-    position: fixed;
-    z-index: 1000;
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-    min-width: 160px;
-    width: 160px;
-    overflow: hidden;
-    display: none;
-}
-
-.smart-sync-context-menu.open {
-    display: block;
-}
-
-.smart-sync-context-item {
-    width: 100%;
-    padding: 10px 16px;
-    text-align: left;
-    background: transparent;
-    border: none;
-    color: var(--text-normal);
-    font-size: var(--font-ui-small);
-    cursor: pointer;
-    transition: background 0.15s ease;
-}
-
-.smart-sync-context-item:hover {
-    background: var(--background-modifier-hover);
-}
-
 /* Confirmation Dialog */
 .smart-sync-confirm-text {
     padding: 20px;
@@ -504,21 +433,11 @@
         font-size: 18px;
         min-width: 20px;
     }
-
-    .smart-sync-dropdown-content,
-    .smart-sync-context-menu {
-        font-size: var(--font-ui-smaller);
-    }
 }
 
 /* Dark mode tweaks */
 .theme-dark .smart-sync-modal {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-.theme-dark .smart-sync-dropdown-content,
-.theme-dark .smart-sync-context-menu {
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
 /* ============= DIFF MODAL ============= */
