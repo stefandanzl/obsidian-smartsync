@@ -3,240 +3,246 @@ import { FileTree, FileList, FileTrees } from "./const";
 import ignoreFactory from "ignore";
 
 export class Compare {
-    constructor(public plugin: SmartSyncPlugin) {
-        this.plugin = plugin;
-    }
-    // Function to compare two file trees and find changes
-    compareFileTreesExcept(remoteFiles: FileTree, localFiles: FileTree) {
-        // Identify added and modified files
+	constructor(public plugin: SmartSyncPlugin) {
+		this.plugin = plugin;
+	}
+	// Function to compare two file trees and find changes
+	compareFileTreesExcept(remote: FileTree, local: FileTree) {
+		// Identify added and modified files
 
-        for (const file1 in remoteFiles.modified) {
-            if (localFiles.modified[file1]) {
-                remoteFiles.except[file1] = remoteFiles.modified[file1];
-                localFiles.except[file1] = localFiles.modified[file1];
+		for (const file1 in remote.modified) {
+			if (local.modified[file1]) {
+				remote.except[file1] = remote.modified[file1];
+				local.except[file1] = local.modified[file1];
 
-                delete remoteFiles.modified[file1];
-                delete localFiles.modified[file1];
-            }
-        }
+				delete remote.modified[file1];
+				delete local.modified[file1];
+			}
+		}
 
-        // Identify where hashes didn't change and remove them from fileTree, as they didn't change
-        for (const file1 in remoteFiles.added) {
-            const localValue = localFiles.added[file1];
-            const remoteValue = remoteFiles.added[file1];
+		// Identify where hashes didn't change and remove them from fileTree, as they didn't change
+		for (const file1 in remote.added) {
+			const localValue = local.added[file1];
+			const remoteValue = remote.added[file1];
 
-            if (!localValue) {
-                this.plugin.log("compare.ts: no localValue defined for "+ file1)
-                continue;
-            }
+			if (!localValue) {
+				this.plugin.log("compare.ts: no localValue defined for " + file1);
+				continue;
+			}
 
-            // Both are FileEntry - compare hashes
-            if (remoteValue.hash === localValue.hash) {
-                delete remoteFiles.added[file1];
-                delete localFiles.added[file1];
-            } else {
-                remoteFiles.except[file1] = remoteValue;
-                localFiles.except[file1] = localValue;
+			// Both are FileEntry - compare hashes
+			if (remoteValue.hash === localValue.hash) {
+				delete remote.added[file1];
+				delete local.added[file1];
+			} else {
+				remote.except[file1] = remoteValue;
+				local.except[file1] = localValue;
 
-                delete remoteFiles.added[file1];
-                delete localFiles.added[file1];
-            }
-        }
+				delete remote.added[file1];
+				delete local.added[file1];
+			}
+		}
 
-        for (const file1 in localFiles.except) {
-            const localValue = localFiles.except[file1];
-            const remoteValue = remoteFiles.except[file1];
+		for (const file1 in local.except) {
+			const localValue = local.except[file1];
+			const remoteValue = remote.except[file1];
 
-            if (!remoteValue) {
-                this.plugin.log("compare.ts: no remoteValue defined for "+ file1)
-                continue;
-            }
-            // Both are FileEntry - compare hashes
-            if (localValue.hash === remoteValue.hash) {
-                delete remoteFiles.except[file1];
-                delete localFiles.except[file1];
-            }
-        }
+			if (!remoteValue) {
+				this.plugin.log("compare.ts: no remoteValue defined for " + file1);
+				continue;
+			}
+			// Both are FileEntry - compare hashes
+			if (localValue.hash === remoteValue.hash) {
+				delete remote.except[file1];
+				delete local.except[file1];
+			}
+		}
 
-        return { remoteMatch: remoteFiles, localMatch: localFiles };
-    }
+		return { remoteMatch: remote, localMatch: local };
+	}
 
-    // Function to compare two file trees and find changes
-    async comparePreviousFileTree(previousFiles: FileList, previousExcept: FileList, currentFiles: FileList) {
-        const fileTree: FileTree = {
-            added: {},
-            deleted: {},
-            modified: {},
-            except: this.checkExistKey(previousExcept, currentFiles),
-        };
+	// Function to compare two file trees and find changes
+	async comparePreviousFileTree(previousFiles: FileList, previousExcept: FileList, currentFiles: FileList) {
+		const fileTree: FileTree = {
+			added: {},
+			deleted: {},
+			modified: {},
+			except: this.checkExistKey(previousExcept, currentFiles),
+		};
 
-        // Identify added and modified files
-        for (const [currentFile, currentValue] of Object.entries(currentFiles)) {
-            const previousValue = previousFiles[currentFile];
+		// Identify added and modified files
+		for (const [currentFile, currentValue] of Object.entries(currentFiles)) {
+			const previousValue = previousFiles[currentFile];
 
-            if (!previousValue) {
-                fileTree.added[currentFile] = currentValue;
-            } else if (previousValue.hash === currentValue.hash) {
-                // Unchanged - hashes match
-            } else {
-                fileTree.modified[currentFile] = currentValue;
-            }
-        }
+			if (!previousValue) {
+				fileTree.added[currentFile] = currentValue;
+			} else if (previousValue.hash === currentValue.hash) {
+				// Unchanged - hashes match
+			} else {
+				fileTree.modified[currentFile] = currentValue;
+			}
+		}
 
-        /**
-         * Correct previous except files that could now be found in modified
-         */
-        Object.keys(previousExcept).forEach((path) => {
-            if (path in fileTree.modified) {
-                fileTree.except[path] = fileTree.modified[path];
-                delete fileTree.modified[path];
-            }
-        });
+		/**
+		 * Correct previous except files that could now be found in modified
+		 */
+		Object.keys(previousExcept).forEach((path) => {
+			if (path in fileTree.modified) {
+				fileTree.except[path] = fileTree.modified[path];
+				delete fileTree.modified[path];
+			}
+		});
 
-        // Identify deleted files
-        for (const [file] of Object.entries(previousFiles)) {
-            if (!currentFiles.hasOwnProperty(file)) {
-                // The key is not in the current object
-                fileTree.deleted[file] = previousFiles[file];
-            }
-        }
+		// Identify deleted files
+		for (const [file] of Object.entries(previousFiles)) {
+			if (!currentFiles.hasOwnProperty(file)) {
+				// The key is not in the current object
+				fileTree.deleted[file] = previousFiles[file];
+			}
+		}
 
-        return fileTree;
-    }
+		return fileTree;
+	}
 
-    /**
-     *  Keeps only the items from sourceObject that also exist in referenceObject
-     */
-    checkExistKey = (sourceObject: FileList, referenceObject: FileList) => {
-        return Object.fromEntries(
-            // Convert back to object
-            Object.entries(sourceObject) // Convert object to [key, value] pairs
-                .filter(([key]) => key in referenceObject) // Keep only if key exists in reference
-        );
-    };
+	/**
+	 *  Keeps only the items from sourceObject that also exist in referenceObject
+	 */
+	checkExistKey = (sourceObject: FileList, referenceObject: FileList) => {
+		return Object.fromEntries(
+			// Convert back to object
+			Object.entries(sourceObject) // Convert object to [key, value] pairs
+				.filter(([key]) => key in referenceObject) // Keep only if key exists in reference
+		);
+	};
 
-    /** This function splits sourceObject into two objects:
-     * - removedItems: items that don't exist in referenceObject
-     * - remainingItems: items that do exist in referenceObject
-     */
-    checkExistKeyBoth = (sourceObject: FileList, referenceObject: FileList) => {
-        const removedItems: FileList = {};
-        const remainingItems: FileList = {};
+	/** This function splits sourceObject into two objects:
+	 * - removedItems: items that don't exist in referenceObject
+	 * - remainingItems: items that do exist in referenceObject
+	 */
+	checkExistKeyBoth = (sourceObject: FileList, referenceObject: FileList) => {
+		const removedItems: FileList = {};
+		const remainingItems: FileList = {};
 
-        for (const key in sourceObject) {
-            if (Object.prototype.hasOwnProperty.call(referenceObject, key)) {
-                remainingItems[key] = sourceObject[key]; // Key exists in both
-            } else {
-                removedItems[key] = sourceObject[key]; // Key only in source
-            }
-        }
+		for (const key in sourceObject) {
+			if (Object.prototype.hasOwnProperty.call(referenceObject, key)) {
+				remainingItems[key] = sourceObject[key]; // Key exists in both
+			} else {
+				removedItems[key] = sourceObject[key]; // Key only in source
+			}
+		}
 
-        return [removedItems, remainingItems];
-    };
+		return [removedItems, remainingItems];
+	};
 
-    private createIgnoreMatcher() {
-        const ig = ignoreFactory();
+	private createIgnoreMatcher() {
+		const ig = ignoreFactory();
 
-        if (this.plugin.settings.exclusionsOverride) {
-            // When override is enabled, don't filter anything
-            return () => false;
-        }
+		if (this.plugin.settings.exclusionsOverride) {
+			// When override is enabled, don't filter anything
+			return () => false;
+		}
 
-        // Add all patterns
-        for (const pattern of this.plugin.settings.ignorePatterns) {
-            ig.add(pattern);
-        }
+		// Add all patterns
+		for (const pattern of this.plugin.settings.ignorePatterns) {
+			ig.add(pattern);
+		}
 
-        // Add .obsidian skip if configured
-        const addObsidian = this.plugin.mobile ? this.plugin.settings.skipHiddenMobile : this.plugin.settings.skipHiddenDesktop;
+		// Add .obsidian skip if configured
+		const addObsidian = this.plugin.mobile
+			? this.plugin.settings.skipHiddenMobile
+			: this.plugin.settings.skipHiddenDesktop;
 
-        if (addObsidian) {
-            ig.add(".obsidian/");
-        }
+		if (addObsidian) {
+			ig.add(".obsidian/");
+		}
 
-        return ig;
-    }
+		return ig;
+	}
 
-    filterExclusions = (fileTree: FileList) => {
-        const ig = this.createIgnoreMatcher();
-        let filtered: FileList = {};
+	filterExclusions = (fileTree: FileList) => {
+		const ig = this.createIgnoreMatcher();
+		let filtered: FileList = {};
 
-        // When override is enabled, ig is a function that returns false (don't ignore)
-        // Otherwise, ig is an Ignore instance with ignores() method
-        const isIgnore =
-            typeof ig === "function"
-                ? () => (ig as () => boolean)()
-                : (path: string) => {
-                      try {
-                          return ig.ignores(path);
-                      } catch (error) {
-                          console.error("Ignore check error for path:", path, error);
-                          return false; // Don't exclude on error
-                      }
-                  };
+		// When override is enabled, ig is a function that returns false (don't ignore)
+		// Otherwise, ig is an Ignore instance with ignores() method
+		const isIgnore =
+			typeof ig === "function"
+				? () => (ig as () => boolean)()
+				: (path: string) => {
+						try {
+							return ig.ignores(path);
+						} catch (error) {
+							console.error("Ignore check error for path:", path, error);
+							return false; // Don't exclude on error
+						}
+					};
 
-        for (const filePath in fileTree) {
-            if (!isIgnore(filePath)) {
-                filtered[filePath] = fileTree[filePath];
-            }
-        }
+		for (const filePath in fileTree) {
+			if (!isIgnore(filePath)) {
+				filtered[filePath] = fileTree[filePath];
+			}
+		}
 
-        return filtered;
-    };
+		return filtered;
+	};
 
-    compareFileTrees = async (remoteFiles: FileList, localFiles: FileList): Promise<FileTrees> => {
-        // Initialize default file trees structure
-        const fileTreeMatch: FileTrees = {
-            remoteFiles: { added: {}, deleted: {}, modified: {}, except: {} },
-            localFiles: { added: {}, deleted: {}, modified: {}, except: {} },
-        };
+	compareFileTrees = async (remote: FileList, local: FileList): Promise<FileTrees> => {
+		// Initialize default file trees structure
+		const fileTreeMatch: FileTrees = {
+			remote: { added: {}, deleted: {}, modified: {}, except: {} },
+			local: { added: {}, deleted: {}, modified: {}, except: {} },
+		};
 
-        // Case 1: No previous file tree or no remote files
-        if (!this.plugin.prevData.files || Object.keys(this.plugin.prevData.files).length === 0 || Object.keys(remoteFiles).length === 0) {
-            if (Object.keys(remoteFiles).length === 0) {
-                // Only local files exist
-                fileTreeMatch.localFiles.added = this.filterExclusions(localFiles);
-                return fileTreeMatch;
-            }
+		// Case 1: No previous file tree or no remote files
+		if (
+			!this.plugin.prevData.files ||
+			Object.keys(this.plugin.prevData.files).length === 0 ||
+			Object.keys(remote).length === 0
+		) {
+			if (Object.keys(remote).length === 0) {
+				// Only local files exist
+				fileTreeMatch.local.added = this.filterExclusions(local);
+				return fileTreeMatch;
+			}
 
-            // Both remote and local files exist, but no previous state
-            const initialTrees = {
-                remote: { added: this.filterExclusions(remoteFiles), deleted: {}, modified: {}, except: {} },
-                local: { added: this.filterExclusions(localFiles), deleted: {}, modified: {}, except: {} },
-            };
+			// Both remote and local files exist, but no previous state
+			const initialTrees = {
+				remote: { added: this.filterExclusions(remote), deleted: {}, modified: {}, except: {} },
+				local: { added: this.filterExclusions(local), deleted: {}, modified: {}, except: {} },
+			};
 
-            const { remoteMatch, localMatch } = this.compareFileTreesExcept(initialTrees.remote, initialTrees.local);
-            return { remoteFiles: remoteMatch, localFiles: localMatch };
-        }
-        /**
-         * Regular workflow ...
-         */
+			const { remoteMatch, localMatch } = this.compareFileTreesExcept(initialTrees.remote, initialTrees.local);
+			return { remote: remoteMatch, local: localMatch };
+		}
+		/**
+		 * Regular workflow ...
+		 */
 
-        // Case 2: Compare with previous state
-        try {
-            const filteredPrevTree = this.filterExclusions(this.plugin.prevData.files);
-            const filteredExcepts = this.filterExclusions(this.plugin.prevData.except);
-            const filteredRemote = this.filterExclusions(remoteFiles);
-            const filteredLocal = this.filterExclusions(localFiles);
+		// Case 2: Compare with previous state
+		try {
+			const filteredPrevTree = this.filterExclusions(this.plugin.prevData.files);
+			const filteredExcepts = this.filterExclusions(this.plugin.prevData.except);
+			const filteredRemote = this.filterExclusions(remote);
+			const filteredLocal = this.filterExclusions(local);
 
-            const [remoteFilesBranch, localFilesBranch] = await Promise.all([
-                this.comparePreviousFileTree(filteredPrevTree, filteredExcepts, filteredRemote),
-                this.comparePreviousFileTree(filteredPrevTree, filteredExcepts, filteredLocal),
-            ]);
+			const [remoteBranch, localBranch] = await Promise.all([
+				this.comparePreviousFileTree(filteredPrevTree, filteredExcepts, filteredRemote),
+				this.comparePreviousFileTree(filteredPrevTree, filteredExcepts, filteredLocal),
+			]);
 
-            remoteFilesBranch.except = { ...this.plugin.prevData.except, ...remoteFilesBranch.except };
-            localFilesBranch.except = { ...this.plugin.prevData.except, ...localFilesBranch.except };
+			remoteBranch.except = { ...this.plugin.prevData.except, ...remoteBranch.except };
+			localBranch.except = { ...this.plugin.prevData.except, ...localBranch.except };
 
-            const { remoteMatch, localMatch } = this.compareFileTreesExcept(remoteFilesBranch, localFilesBranch);
+			const { remoteMatch, localMatch } = this.compareFileTreesExcept(remoteBranch, localBranch);
 
-            // Post-process deleted files
-            remoteMatch.deleted = this.checkExistKey(remoteMatch.deleted, localFiles);
-            localMatch.deleted = this.checkExistKey(localMatch.deleted, remoteFiles);
+			// Post-process deleted files
+			remoteMatch.deleted = this.checkExistKey(remoteMatch.deleted, local);
+			localMatch.deleted = this.checkExistKey(localMatch.deleted, remote);
 
-            return { remoteFiles: remoteMatch, localFiles: localMatch };
-        } catch (error) {
-            console.error("File comparison error:", error);
-            throw error;
-        }
-    };
+			return { remote: remoteMatch, local: localMatch };
+		} catch (error) {
+			console.error("File comparison error:", error);
+			throw error;
+		}
+	};
 }

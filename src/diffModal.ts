@@ -9,161 +9,156 @@ import SmartSyncPlugin from "./main";
 import { Location } from "./const";
 
 export class DiffModal extends Modal {
-    mergeView: MergeView | undefined;
-    loading = true;
+	mergeView: MergeView | undefined;
+	loading = true;
 
-    constructor(
-        app: App,
-        public plugin: SmartSyncPlugin,
-        public filePath: string,
-        public location: Location
-    ) {
-        super(app);
-    }
+	constructor(
+		app: App,
+		public plugin: SmartSyncPlugin,
+		public filePath: string,
+		public location: Location
+	) {
+		super(app);
+	}
 
-    async onOpen() {
-        const { titleEl, contentEl, modalEl } = this;
+	async onOpen() {
+		const { titleEl, contentEl, modalEl } = this;
 
-        modalEl.addClass("smart-sync-diff-modal");
-        titleEl.setText(`Diff: ${this.filePath}`);
+		modalEl.addClass("smart-sync-diff-modal");
+		titleEl.setText(`Diff: ${this.filePath}`);
 
-        // Show loading message
-        contentEl.createEl("p", {
-            text: "Loading diff...",
-            cls: "smart-sync-loading",
-        });
+		// Show loading message
+		contentEl.createEl("p", {
+			text: "Loading diff...",
+			cls: "smart-sync-loading",
+		});
 
-        try {
-            // Fetch both local and remote content
-            const [localContent, remoteContent] = await Promise.all([this.fetchLocalContent(), this.fetchRemoteContent()]);
+		try {
+			// Fetch both local and remote content
+			const [localContent, remoteContent] = await Promise.all([
+				this.fetchLocalContent(),
+				this.fetchRemoteContent(),
+			]);
 
-            this.loading = false;
-            contentEl.empty();
+			this.loading = false;
+			contentEl.empty();
 
-            if (localContent === null && remoteContent === null) {
-                contentEl.createEl("p", {
-                    text: "File not found locally or remotely.",
-                });
-                return;
-            }
+			if (localContent === null && remoteContent === null) {
+				contentEl.createEl("p", {
+					text: "File not found locally or remotely.",
+				});
+				return;
+			}
 
-            // Create the merge view
-            this.createMergeView(localContent || "", remoteContent || "");
-        } catch (error) {
-            this.loading = false;
-            contentEl.empty();
-            contentEl.createEl("p", {
-                text: `Error loading diff: ${error}`,
-                cls: "smart-sync-error",
-            });
-            console.error("Diff error:", error);
-        }
-    }
+			// Create the merge view
+			this.createMergeView(localContent || "", remoteContent || "");
+		} catch (error) {
+			this.loading = false;
+			contentEl.empty();
+			contentEl.createEl("p", {
+				text: `Error loading diff: ${error}`,
+				cls: "smart-sync-error",
+			});
+			console.error("Diff error:", error);
+		}
+	}
 
-    private async fetchLocalContent(): Promise<string | null> {
-        try {
-            if (await this.app.vault.adapter.exists(this.filePath)) {
-                return await this.app.vault.adapter.read(this.filePath);
-            }
-            return null;
-        } catch (error) {
-            console.error("Error fetching local content:", error);
-            return null;
-        }
-    }
+	private async fetchLocalContent(): Promise<string | null> {
+		try {
+			if (await this.app.vault.adapter.exists(this.filePath)) {
+				return await this.app.vault.adapter.read(this.filePath);
+			}
+			return null;
+		} catch (error) {
+			console.error("Error fetching local content:", error);
+			return null;
+		}
+	}
 
-    private async fetchRemoteContent(): Promise<string | null> {
-        try {
-            const response = await this.plugin.smartSyncClient.getFile(this.filePath);
-            if (response.status === 200) {
-                // Convert ArrayBuffer to string
-                const decoder = new TextDecoder("utf-8");
-                return decoder.decode(response.data);
-            }
-            return null;
-        } catch (error) {
-            console.error("Error fetching remote content:", error);
-            return null;
-        }
-    }
+	private async fetchRemoteContent(): Promise<string | null> {
+		try {
+			const response = await this.plugin.smartSyncClient.getFile(this.filePath);
+			if (response.status === 200) {
+				// Convert ArrayBuffer to string
+				const decoder = new TextDecoder("utf-8");
+				return decoder.decode(response.data);
+			}
+			return null;
+		} catch (error) {
+			console.error("Error fetching remote content:", error);
+			return null;
+		}
+	}
 
-    private createMergeView(localContent: string, remoteContent: string) {
-        const { contentEl } = this;
-        // Determine label order based on location
-        const [leftLabel, rightLabel] =
-            this.location === "localFiles"
-                ? ["Remote", "Local"] // local is new → goes right
-                : ["Local", "Remote"]; // remote is new → goes right
+	private createMergeView(localContent: string, remoteContent: string) {
+		const { contentEl } = this;
+		// Determine label order based on location
+		const [leftLabel, rightLabel] =
+			this.location === "local"
+				? ["Remote", "Local"] // local is new → goes right
+				: ["Local", "Remote"]; // remote is new → goes right
 
-        // Add header showing which side is which
-        const header = contentEl.createDiv({
-            cls: "smart-sync-diff-header",
-        });
-        header.createSpan({
-            cls: "smart-sync-diff-header-left",
-            text: leftLabel,
-        });
-        header.createSpan({
-            cls: "smart-sync-diff-header-right",
-            text: rightLabel,
-        });
+		// Add header showing which side is which
+		const header = contentEl.createDiv({
+			cls: "smart-sync-diff-header",
+		});
+		header.createSpan({
+			cls: "smart-sync-diff-header-left",
+			text: leftLabel,
+		});
+		header.createSpan({
+			cls: "smart-sync-diff-header-right",
+			text: rightLabel,
+		});
 
-        // Basic extensions for both editors
-        const basicExtensions = [
-            lineNumbers(),
-            highlightSelectionMatches(),
-            drawSelection(),
-            keymap.of([...standardKeymap, indentWithTab, ...searchKeymap]),
-            history(),
-            search(),
-            EditorView.lineWrapping,
-        ];
+		// Basic extensions for both editors
+		const basicExtensions = [
+			lineNumbers(),
+			highlightSelectionMatches(),
+			drawSelection(),
+			keymap.of([...standardKeymap, indentWithTab, ...searchKeymap]),
+			history(),
+			search(),
+			EditorView.lineWrapping,
+		];
 
-        // Remote editor config (read-only)
-        const remoteConfig = {
-            doc: remoteContent,
-            extensions: [
-                ...basicExtensions,
-                EditorView.editable.of(true),
-                EditorState.readOnly.of(true),
-            ],
-        };
+		// Remote editor config (read-only)
+		const remoteConfig = {
+			doc: remoteContent,
+			extensions: [...basicExtensions, EditorView.editable.of(true), EditorState.readOnly.of(true)],
+		};
 
-        // Local editor config (also read-only for viewing only)
-        const localConfig = {
-            doc: localContent,
-            extensions: [
-                ...basicExtensions,
-                EditorView.editable.of(true),
-                EditorState.readOnly.of(true),
-            ],
-        };
+		// Local editor config (also read-only for viewing only)
+		const localConfig = {
+			doc: localContent,
+			extensions: [...basicExtensions, EditorView.editable.of(true), EditorState.readOnly.of(true)],
+		};
 
-        const [leftConfig, rightConfig] =
-            this.location === "localFiles"
-                ? [remoteConfig, localConfig] // local is new → goes right
-                : [localConfig, remoteConfig]; // remote is new → goes right
+		const [leftConfig, rightConfig] =
+			this.location === "local"
+				? [remoteConfig, localConfig] // local is new → goes right
+				: [localConfig, remoteConfig]; // remote is new → goes right
 
-        // Create container for the merge view
-        const mergeContainer = contentEl.createDiv({
-            cls: "smart-sync-merge-view-container",
-        });
-        mergeContainer.addClasses(["cm-s-obsidian", "mod-cm6"]);
+		// Create container for the merge view
+		const mergeContainer = contentEl.createDiv({
+			cls: "smart-sync-merge-view-container",
+		});
+		mergeContainer.addClasses(["cm-s-obsidian", "mod-cm6"]);
 
-        // Create the MergeView
-        this.mergeView = new MergeView({
-            a: leftConfig, // Left side (local)
-            b: rightConfig, // Right side (remote)
-            parent: mergeContainer,
-            collapseUnchanged: {
-                minSize: 6,
-                margin: 4,
-            },
-        });
-    }
+		// Create the MergeView
+		this.mergeView = new MergeView({
+			a: leftConfig, // Left side (local)
+			b: rightConfig, // Right side (remote)
+			parent: mergeContainer,
+			collapseUnchanged: {
+				minSize: 6,
+				margin: 4,
+			},
+		});
+	}
 
-    onClose() {
-        this.mergeView?.destroy();
-        super.onClose();
-    }
+	onClose() {
+		this.mergeView?.destroy();
+		super.onClose();
+	}
 }

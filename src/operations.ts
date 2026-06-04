@@ -5,816 +5,853 @@ import { normalizePath } from "obsidian";
 import { Controller, FileEntry, FileList, FileTree, FileTrees, PostSync, Status, STATUS_ITEMS } from "./const";
 
 export class Operations {
-    newPrevDataFiles: {
-        modifiedAdded: string[];
-        deleted: string[];
-    }
-    constructor(public plugin: SmartSyncPlugin) {
-        this.plugin = plugin;
-        this.newPrevDataFiles = {
-            modifiedAdded: [],
-            deleted: []
-        }
-    }
-
-    /**
-     * Configure and create SmartSync client
-     */
-    configSmartSync(url: string, port: number, authToken?: string): SmartSyncClient {
-        if (!url) {
-            throw new Error("Missing SmartSync URL");
-        }
-
-        return new SmartSyncClient(
-            {
-                serverUrl: url,
-                port: port || 443,
-                authToken,
-            },
-            this.plugin
-        );
-    }
-
-    async downloadFiles(filesMap: FileList): Promise<void> {
-        if (!filesMap || Object.keys(filesMap).length === 0) {
-            this.plugin.log("No files to download");
-            return;
-        }
-
-        // First attempt for all files
-        const results = await Promise.all(
-            Object.entries(filesMap).map(async ([filePath, _]) => ({
-                filePath,
-                success: await this.downloadFile(filePath),
-            }))
-        );
-
-        // Filter out failed downloads and retry them
-        const failedDownloads = results.filter((r) => !r.success);
-        if (failedDownloads.length > 0) {
-            console.log(`Retrying ${failedDownloads.length} failed downloads...`);
-            await Promise.all(failedDownloads.map(({ filePath }) => this.downloadFile(filePath)));
-        }
-    }
-
-    private async downloadFile(filePath: string): Promise<boolean> {
-        try {
-            // Verify remote file exists by checking if server is online
-            const status = await this.plugin.smartSyncClient.getStatus();
-            if (!status.online) {
-                console.error(`Remote server is offline, cannot download ${filePath}`);
-                return false;
-            }
-
-            // Download with retry
-            const fileData = await this.downloadWithRetry(filePath);
-            if (fileData.status !== 200) {
-                throw new Error(`Failed to download ${filePath}: ${fileData.status}`);
-            }
-            await this.ensureLocalDirectory(dirname(filePath));
-            await this.plugin.app.vault.adapter.writeBinary(filePath, fileData.data);
-            this.plugin.processed();
-            this.newPrevDataFiles.modifiedAdded.push(filePath);
-            return true;
-        } catch (error) {
-            this.plugin.log(`Error downloading ${filePath}:`, error);
-            return false;
-        }
-    }
-
-    // Helper methods
-    private async downloadWithRetry(
-        remotePath: string,
-        maxRetries = 2
-    ): Promise<{
-        data: ArrayBuffer;
-        status: number;
-    }> {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await this.plugin.smartSyncClient.getFile(remotePath);
-            } catch (error) {
-                if (attempt === maxRetries) throw error;
-                console.log(`Retry ${attempt} for ${remotePath}`);
-                await new Promise((resolve) => setTimeout(resolve, 100));
-            }
-        }
-        throw new Error(`Failed to download after ${maxRetries} attempts`);
-    }
-
-    private async ensureLocalDirectory(path: string): Promise<void> {
-        const parts = normalizePath(path).split('/').filter(Boolean);
-        let current = '';
-        for (const part of parts) {
-            current = current ? `${current}/${part}` : part;
-            if (!(await this.plugin.app.vault.adapter.exists(current))) {
-                await this.plugin.app.vault.createFolder(current);
-            }
-        }
-    }
-
-    /**
-     * Upload files to SmartSyncServer
-     */
-    async uploadFiles(fileChecksums: FileList): Promise<void> {
-        if (!fileChecksums || Object.keys(fileChecksums).length === 0) {
-            this.plugin.log("No files to upload");
-            return;
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        for (const [localFilePath, _] of Object.entries(fileChecksums)) {
-            await this.uploadFile(localFilePath);
-        }
-
-        this.plugin.log("Upload completed");
-    }
-
-    /**
-     * Upload a single file to SmartSyncServer
-     */
-    private async uploadFile(filePath: string): Promise<void> {
-        try {
-
-            const fileContent = await this.plugin.app.vault.adapter.readBinary(normalizePath(filePath));
-
-            if (await this.plugin.smartSyncClient.uploadFile(filePath, fileContent)){
-                this.plugin.processed();
-                this.newPrevDataFiles.modifiedAdded.push(filePath);
-                this.plugin.log(`Uploaded: ${filePath}`);
-            }
-        } catch (error) {
-            console.error(`Error uploading ${filePath}:`, error);
-        }
-    }
-
-    /**
-     * Delete files from SmartSyncServer
-     */
-    async deleteFilesRemote(fileTree: FileList): Promise<void> {
-        if (!fileTree || Object.keys(fileTree).length === 0) {
-            this.plugin.log("No files to delete on remote");
-            return;
-        }
-
-        const failedPaths: string[] = [];
-
-        const deleteFile = async (path: string): Promise<void> => {
-            const cleanPath = path.endsWith("/") ? path.replace(/\/$/, "") : path;
-            const fullPath = join(this.plugin.baseRemotePath, cleanPath);
-
-            try {
-                const response = await this.plugin.smartSyncClient.deleteFile(fullPath);
-                if (response !== 200 && response !== 204 && response !== 404) {
-                    console.log(fullPath, " Error status: ", response);
-                    failedPaths.push(fullPath);
-                    return;
-                }
-                this.plugin.processed();
-                this.newPrevDataFiles.deleted.push(path);
-            } catch (error) {
-                console.error(`Delete failed for ${cleanPath}:`, error);
-                failedPaths.push(fullPath);
-            }
-        };
-
-        const retryDelete = async (path: string): Promise<void> => {
-            try {
-                const status = await this.plugin.smartSyncClient.getStatus();
-                if (!status.online) {
-                    console.log(`Server offline for ${path}, skipping delete retry`);
-                    this.plugin.processed();
-                    this.newPrevDataFiles.deleted.push(path);
-                    return;
-                }
-
-                const response = await this.plugin.smartSyncClient.deleteFile(path);
-                if (response === 200 || response === 204 || response === 404) {
-                    this.plugin.processed();
-                    this.newPrevDataFiles.deleted.push(path);
-                    this.plugin.log(`Retry successful: ${path}`);
-                } else {
-                    console.log(`Delete still failed for ${path}, status: ${response}`);
-                }
-            } catch (error) {
-                console.error(`Final delete attempt failed for ${path}:`, error);
-            }
-        };
-
-        // First attempt for all files
-        await Promise.all(Object.keys(fileTree).map(deleteFile));
-
-        // Retry failed deletions
-        if (failedPaths.length > 0) {
-            console.log(`Retrying ${failedPaths.length} failed deletions...`);
-            await Promise.all(failedPaths.map(retryDelete));
-        }
-    }
-
-    /**
-     * Delete files from local storage
-     */
-    async deleteFilesLocal(fileTree: FileList): Promise<void> {
-        if (!fileTree || Object.keys(fileTree).length === 0) {
-            this.plugin.log("No files to delete locally");
-            return;
-        }
-
-        for (const file of Object.keys(fileTree)) {
-            await this.deleteLocalFile(file);
-        }
-    }
-
-    private async deleteLocalFile(file: string): Promise<void> {
-        try {
-            if (this.plugin.mobile) {
-                await this.plugin.app.vault.adapter.trashLocal(file);
-            } else {
-                await this.plugin.app.vault.adapter.trashSystem(file);
-            }
-            this.plugin.processed();
-            this.newPrevDataFiles.deleted.push(file);
-        } catch (error) {
-            console.error(`Error deleting local file ${file}:`, error);
-        }
-    }
-
-    private async ensureRemoteDirectory(path: string): Promise<void> {
-        try {
-            console.log(`Creating remote directory: ${path}`);
-            const cleanPath = path.replace(/\/$/, ""); // Remove trailing slash for folder creation
-            const fullPath = join(this.plugin.baseRemotePath, cleanPath);
-            const response = await this.plugin.smartSyncClient.createFolder(fullPath);
-            if (!response) {
-                throw new Error(`Failed to create remote directory ${path}`);
-            }
-        } catch (error) {
-            console.error(`Error creating remote directory ${path}:`, error);
-        }
-    }
-
-    async test(show = true, verbose = false) {
-        if (this.plugin.status === Status.TEST) {
-            return;
-        }
-        try {
-            show && this.plugin.setStatus(Status.TEST);
-            verbose && this.plugin.show(`${Status.TEST} Testing ...`);
-
-            const status = await this.plugin.smartSyncClient.establishConnection(show);
-
-            // Check if online field exists and is true
-            if (status) {
-                verbose && this.plugin.show("Connection successful");
-                // ALWAYS set status to NONE after successful test, regardless of show parameter
-                show && this.plugin.setStatus(Status.NONE);
-
-                if (this.plugin.prevData.error) {
-                    this.plugin.show("Clear your ERROR state manually!");
-                    this.plugin.setStatus(Status.ERROR);
-                }
-                return true;
-            }
-            console.log("[TEST] Connection failed");
-            show && this.plugin.show("Connection failed: Server is offline");
-            this.plugin.setStatus(Status.OFFLINE);
-
-            return false;
-        } catch (error) {
-            console.error("[TEST] Connection test failed with error:", error);
-            show && this.plugin.show(`SmartSync connection test failed. Error: ${error}`);
-            console.error("Failed miserably", error);
-            this.plugin.setStatus(Status.ERROR);
-            this.plugin.setError(true);
-            return false;
-        }
-    }
-
-    /**
-     * This creates a list of files with predefined actions to take
-     * @param show
-     * @param exclude
-     * @returns
-     */
-    async check(show = true, exclude = true) {
-        if (this.plugin.status !== Status.NONE && this.plugin.status !== Status.OFFLINE) {
-            show && this.plugin.show(`Checking not possible, currently ${this.plugin.status}`);
-            return;
-        }
-
-        this.plugin.setStatus(Status.CHECK);
-        show && this.plugin.show(`${Status.CHECK} Checking ...`);
-
-        let response;
-        const stats = {
-            startTime: Date.now(),
-            testTime: 0,
-            remoteScanTime: 0,
-            localScanTime: 0,
-            compareTime: 0,
-            totalTime: 0,
-            fileCounts: {
-                remote: 0,
-                local: 0,
-            },
-            hashStats: {
-                totalFiles: 0,
-                sources: {
-                    prevData: 0,
-                    calculated: 0,
-                    cache: 0
-                },
-                excluded: 0
-            },
-        };
-
-        try {
-            // Test connection
-            const testStart = Date.now();
-            response = await this.test(false);
-            stats.testTime = Date.now() - testStart;
-
-            if (!response) {
-                show &&
-                    logNotice(
-                        `Testing failed, can't continue Check action!\nStatus: ${STATUS_ITEMS[this.plugin.status].label} ${this.plugin.status}`
-                    );
-                return false;
-            }
-
-            this.plugin.checkTime = Date.now();
-
-            // Generate file hash trees with timing
-            const remoteStart = Date.now();
-            const remotePromise = this.plugin.checksum.generateRemoteHashTree(this.plugin.smartSyncClient);
-
-            const localStart = Date.now();
-            const localPromise = this.plugin.checksum.generateLocalHashTree(exclude);
-
-            const [remoteFiles, localFiles] = await Promise.all([remotePromise, localPromise]);
-
-            stats.remoteScanTime = remoteFiles.end - remoteStart;
-            stats.localScanTime = localFiles.end - localStart;
-            stats.fileCounts.remote = Object.keys(remoteFiles.files).length;
-            stats.fileCounts.local = Object.keys(localFiles.files).length;
-
-            // Update hash statistics from checksum
-            if (this.plugin.hashStats ) {
-                stats.hashStats = this.plugin.hashStats;
-            }
-
-            // Compare file trees
-            const compareStart = Date.now();
-            this.plugin.allFiles.local = localFiles.files;
-            this.plugin.allFiles.remote = remoteFiles.files;
-            this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
-            stats.compareTime = Date.now() - compareStart;
-
-            const ok = this.dangerCheck();
-
-            // Calculate total time
-            stats.totalTime = Date.now() - stats.startTime;
-
-            // Log performance statistics
-            this.plugin.log(`=== CHECK PERFORMANCE STATISTICS ===`);
-            this.plugin.log(`Total time: ${stats.totalTime}ms`);
-            this.plugin.log(`Connection test: ${stats.testTime}ms`);
-            this.plugin.log(`Remote scan: ${stats.remoteScanTime}ms (${stats.fileCounts.remote} files)`);
-            this.plugin.log(`Local scan: ${stats.localScanTime}ms (${stats.fileCounts.local} files)`);
-            this.plugin.log(`Comparison: ${stats.compareTime}ms`);
-            this.plugin.log(`Files per second (Remote): ${Math.round((stats.fileCounts.remote / stats.remoteScanTime) * 1000)}`);
-            this.plugin.log(`Files per second (Local): ${Math.round((stats.fileCounts.local / stats.localScanTime) * 1000)}`);
-
-            // Log hash statistics
-            if (stats.hashStats) {
-                const hashPercentage =
-                    stats.hashStats.totalFiles > 0 ? Math.round(((stats.hashStats.sources.prevData + stats.hashStats.sources.cache) / stats.hashStats.totalFiles) * 100) : 0;
-                this.plugin.log(`\n=== HASH OPTIMIZATION STATISTICS ===`);
-                this.plugin.log(`Total files processed: ${stats.hashStats.totalFiles}`);
-                this.plugin.log(`Hashes from prevData: ${stats.hashStats.sources.prevData}`);
-                this.plugin.log(`Hashes from cache: ${stats.hashStats.sources.cache} (${hashPercentage}% optimized)`);
-                this.plugin.log(`Hashes calculated: ${stats.hashStats.sources.calculated}`);
-                this.plugin.log(`Files excluded: ${stats.hashStats.excluded}`);
-                this.plugin.log(`Optimization rate: ${hashPercentage}% - Higher is better!`);
-                this.plugin.log(`===============================`);
-            }
-
-            show && ok && this.plugin.show(`Finished checking files after ${calcDuration(this.plugin.checkTime)} s`);
-            if (show && ok) {
-                if (this.plugin.calcTotal(this.plugin.fileTrees.localFiles.except) > 0) {
-                    this.plugin.show(
-                        "Found file sync exceptions! Open SmartSync Control Panel and either PUSH/PULL or resolve each case separately!",
-                        5000
-                    );
-                }
-            }
-            this.plugin.lastScrollPosition = 0;
-            // this.plugin.tempExcludedFiles = {};
-            this.plugin.modal?.renderFileTrees();
-            ok && this.plugin.setStatus(Status.NONE);
-            return true;
-        } catch (error) {
-            console.error("CHECK ERROR: ", error);
-            show && this.plugin.show(`CHECK ERROR: ${error}`);
-            this.plugin.setError(true);
-            response ? this.plugin.setStatus(Status.ERROR) : this.plugin.setStatus(Status.OFFLINE);
-            throw error;
-        }
-    }
-
-    async saveAndCheck() {
-        // Test connection
-        if (!(await this.plugin.operations.test(false))) return false;
-        
-        // Scan both in parallel
-        const [remoteFiles, localFiles] = await Promise.all([
-            this.plugin.checksum.generateRemoteHashTree(this.plugin.smartSyncClient),
-            this.plugin.checksum.generateLocalHashTree(true)
-        ]);
-        
-        // Compare
-        // this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
-        
-        // Save ONLY selected, non-excluded files to prevData
-        
-        this.plugin.allFiles.local = localFiles.files;
-        this.plugin.allFiles.remote = remoteFiles.files;
-        this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remoteFiles.files, localFiles.files);
-
-        const saveableFiles: any = {...localFiles.files};
-
-        for (const path of Object.keys(this.plugin.fileSelection)) {
-            if (this.plugin.fileSelection[path].selected === false) {
-                if (path in this.plugin.prevData.files) {
-                    saveableFiles[path] = this.plugin.prevData.files[path];  // Keep old state
-                } else {
-                    delete saveableFiles[path];  // Remove if wasn't in prevData
-                }
-            }
-        }
-
-        const newExcept = this.plugin.compare.checkExistKey(this.plugin.fileTrees.localFiles.except, saveableFiles);
-
-        const now =  msToSeconds(Date.now());
-        
-        this.plugin.prevData = {
-            error: this.plugin.prevData.error,
-            files: saveableFiles,
-            except: newExcept,
-            timestamps: {
-                prevdataUpdate: now,
-                lastFullSync:  now,
-                lastFileSync: now,
-            },
-        };
-
-        this.plugin.lastScrollPosition = 0;
-        this.plugin.modal?.renderFileTrees();
-        
-        this.plugin.app.vault.adapter.write(this.plugin.prevPath, JSON.stringify(this.plugin.prevData, null, 2));
-        this.plugin.show("Saved state and checked for differences");
-        return true;
-    }
-
-    /**
-     * Filter fileTrees to only include selected files
-     */
-    private filterSelectedFiles(fileTrees: FileTrees): FileTrees {
-        const fileSelection = this.plugin.fileSelection;
-
-        if (!fileSelection || Object.keys(fileSelection).length === 0) {
-            // No selection filter, return original
-            return fileTrees;
-        }
-
-        const filterFileList = (fileList: FileList): FileList => {
-            const filtered: FileList = {};
-            for (const [path, hash] of Object.entries(fileList)) {
-                // Include file if fileSelection[path] is true or undefined (not in list = sync all)
-                const fileData = fileSelection[path];
-                if (!fileData || fileData.selected !== false) {
-                    filtered[path] = hash;
-                }
-            }
-            return filtered;
-        };
-
-        const filterFileTree = (fileTree: FileTree): FileTree => {
-            return {
-                added: filterFileList(fileTree.added),
-                deleted: filterFileList(fileTree.deleted),
-                modified: filterFileList(fileTree.modified),
-                except: filterFileList(fileTree.except),
-            };
-        };
-
-        return {
-            remoteFiles: filterFileTree(fileTrees.remoteFiles),
-            localFiles: filterFileTree(fileTrees.localFiles),
-        };
-    }
-
-    /**
-     * Main Sync function for this plugin. This manages all file exchanging
-     * @param controller
-     * @param show
-     * @returns
-     */
-    async sync(controller: Controller, show = true, postSync: PostSync = "saveAndCheck") {
-        console.log("[SYNC] Starting sync, show:", show, "controller:", controller);
-        if (this.plugin.prevData.error) {
-            console.log("[SYNC] Blocked by error state");
-            show && this.plugin.show("Error detected - please clear in control panel or force action by retriggering action");
-            return;
-        }
-
-        try {
-            this.plugin.isSyncing = true;
-            console.log("[SYNC] Testing connection...");
-            if (!(await this.test(false))) {
-                console.log("[SYNC] Connection test failed, aborting sync");
-                show && this.plugin.show("Connection Problem detected!");
-                return;
-            }
-            console.log("[SYNC] Connection test passed, current status:", this.plugin.status);
-
-            if (this.plugin.status !== Status.NONE) {
-                show && this.plugin.show(`Operation not possible, currently working on '${this.plugin.status}'`);
-                return;
-            }
-
-            this.newPrevDataFiles = {
-                modifiedAdded: [],
-                deleted: []
-            }
-
-            if (!this.plugin.fileTrees) {
-                show && this.plugin.show("Checking files before operation...");
-                const response = await this.check(show);
-                console.log("SYNC CHECK FAIL CORRECT");
-                if (!response) {
-                    return;
-                }
-            }
-
-            this.plugin.setStatus(Status.SYNC);
-
-            // Filter fileTrees to only include selected files
-            const fileTreesSelected = this.filterSelectedFiles(this.plugin.fileTrees);
-
-            // Calculate total operations needed
-            const operationsToCount = [];
-
-            if (controller.remote) {
-                if (controller.remote.added) operationsToCount.push(fileTreesSelected.remoteFiles.added);
-                if (controller.remote.modified) operationsToCount.push(fileTreesSelected.remoteFiles.modified);
-                if (controller.remote.deleted) operationsToCount.push(fileTreesSelected.remoteFiles.deleted);
-                if (controller.remote.except) operationsToCount.push(fileTreesSelected.remoteFiles.except);
-            }
-
-            if (controller.local) {
-                if (controller.local.added) operationsToCount.push(fileTreesSelected.localFiles.added);
-                if (controller.local.modified) operationsToCount.push(fileTreesSelected.localFiles.modified);
-                if (controller.local.deleted) operationsToCount.push(fileTreesSelected.localFiles.deleted);
-                if (controller.local.except) operationsToCount.push(fileTreesSelected.localFiles.except);
-            }
-
-            const total = this.plugin.calcTotal(...operationsToCount.filter(Boolean));
-
-            if (total === 0) {
-                if (Object.keys(fileTreesSelected.localFiles.except).length > 0) {
-                    show && this.plugin.show("You have file sync exceptions. Clear them in SmartSync Control Panel.", 5000);
-                } else {
-                    show && this.plugin.show("No files to sync");
-                }
-                this.plugin.setStatus(Status.NONE);
-                return;
-            }
-            this.plugin.statusBar2.setText(" 0/" + this.plugin.loadingTotal);
-
-            show && this.plugin.show("Synchronising...");
-
-            const operations: Promise<void>[] = [];
-
-            // Handle Remote operations
-            if (controller.remote) {
-                if (controller.remote.added === 1) {
-                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remoteFiles.added));
-                } else if (controller.remote.added === -1) {
-                    operations.push(this.plugin.operations.deleteFilesRemote(fileTreesSelected.remoteFiles.added));
-                }
-
-                if (controller.remote.deleted === 1) {
-                    operations.push(this.plugin.operations.deleteFilesLocal(fileTreesSelected.remoteFiles.deleted));
-                } else if (controller.remote.deleted === -1) {
-                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remoteFiles.deleted));
-                }
-
-                if (controller.remote.modified === 1) {
-                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remoteFiles.modified));
-                } else if (controller.remote.modified === -1) {
-                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remoteFiles.modified));
-                }
-
-                if (controller.remote.except === 1) {
-                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remoteFiles.except));
-                } else if (controller.remote.except === -1) {
-                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remoteFiles.except));
-                }
-            }
-
-            // Handle Local operations
-            if (controller.local) {
-                if (controller.local.added === 1) {
-                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.localFiles.added));
-                } else if (controller.local.added === -1) {
-                    operations.push(this.plugin.operations.deleteFilesLocal(fileTreesSelected.localFiles.added));
-                }
-
-                if (controller.local.deleted === 1) {
-                    operations.push(this.plugin.operations.deleteFilesRemote(fileTreesSelected.localFiles.deleted));
-                } else if (controller.local.deleted === -1) {
-                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.localFiles.deleted));
-                }
-
-                if (controller.local.modified === 1) {
-                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.localFiles.modified));
-                } else if (controller.local.modified === -1) {
-                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.localFiles.modified));
-                }
-
-                if (controller.local.except === 1) {
-                    operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.localFiles.except));
-                } else if (controller.local.except === -1) {
-                    operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.localFiles.except));
-                }
-            }
-
-            // Execute all operations concurrently
-            await Promise.all(operations);
-            this.plugin.setStatus(Status.NONE);
-
-            if (postSync === "check"){
-                show && this.plugin.show("Sync completed - checking again");
-                await this.plugin.saveState();
-                await this.check(true);
-            }
-            else if (postSync === "prevSuccess"){
-                for (const filePath in this.newPrevDataFiles.modifiedAdded){
-                    const statPromise = this.plugin.app.vault.adapter.stat(filePath)
-                    const readPromise = this.plugin.app.vault.adapter.readBinary(filePath)
-                    const [stat, data] = await Promise.all([statPromise, readPromise]);
-                    if (!stat || !data){
-                        console.error("No stat or data available for postSync "+ postSync )
-                        continue;
-                    }
-                    
-                    this.plugin.prevData.files[filePath] = {
-                        hash: await sha256(data),
-                        size: stat.size,
-                        mtime: msToSeconds(stat.mtime)
-                    }
-                }
-                for (const filePath in this.newPrevDataFiles.deleted){
-                    delete this.plugin.prevData.files[filePath];
-                }
-                
-                const now = msToSeconds(Date.now())
-
-                this.plugin.prevData.timestamps = {
-                    ...this.plugin.prevData.timestamps,
-                    prevdataUpdate: now,
-                    lastFileSync: now,
-                    lastFullSync: now
-                }
-
-                await this.plugin.savePrevData();
-            } else if (postSync === "saveAndCheck"){
-                await this.saveAndCheck()
-            }
-            this.plugin.sessionSynced = true;
-            // this.plugin.tempExcludedFiles = {};
-
-            show && this.plugin.show("Done");
-            this.plugin.setStatus(Status.NONE);
-        } catch (error) {
-            console.error("SYNC", error);
-            show && this.plugin.show(`SYNC Error: ${error}`);
-            this.plugin.setError(true);
-            this.plugin.setStatus(Status.ERROR);
-        } finally {
-            this.plugin.isSyncing = false;
-            this.plugin.finished();
-        }
-    }
-
-    async duplicateLocal() {
-        this.plugin.show("Duplicating local Vault ...");
-        await this.sync({
-            local: {
-                added: 1,
-                deleted: 1,
-                modified: 1,
-                except: 1,
-            },
-            remote: {
-                added: -1,
-                deleted: -1,
-                modified: -1,
-            },
-        });
-    }
-
-    async duplicateRemote() {
-        this.plugin.show("Duplicating Remote Vault ...");
-        await this.plugin.operations.sync({
-            local: {
-                added: -1,
-                deleted: -1,
-                modified: -1,
-            },
-            remote: {
-                added: 1,
-                deleted: 1,
-                modified: 1,
-                except: 1,
-            },
-        });
-    }
-
-    async push() {
-        this.sync({
-            local: {
-                added: 1,
-                deleted: 1,
-                modified: 1,
-                except: 1,
-            },
-            remote: {},
-        });
-    }
-
-    async pull() {
-        this.sync({
-            local: {},
-            remote: {
-                added: 1,
-                deleted: 1,
-                modified: 1,
-                except: 1,
-            },
-        });
-    }
-
-    async fullSync() {
-        this.sync({
-            local: {
-                added: 1,
-                deleted: 1,
-                modified: 1,
-            },
-            remote: {
-                added: 1,
-                deleted: 1,
-                modified: 1,
-            },
-        });
-    }
-
-    async fullSyncSilent() {
-        this.sync(
-            {
-                local: {
-                    added: 1,
-                    deleted: 1,
-                    modified: 1,
-                },
-                remote: {
-                    added: 1,
-                    deleted: 1,
-                    modified: 1,
-                },
-            },
-            false
-        );
-    }
-
-    dangerCheck() {
-        const max = 15;
-        let counter = 0;
-
-        Object.keys(this.plugin.fileTrees.localFiles.deleted).forEach((v) => {
-            if (v.startsWith(".obsidian")) {
-                counter++;
-            }
-        });
-        if (counter > max) {
-            this.plugin.errorWrite();
-            this.plugin.show(`WARNING! DANGEROUS AMOUNT OF SYSTEM FILES HAVE PENDING DELETION (${counter})`, 5000);
-            this.plugin.setStatus(Status.ERROR);
-            return false;
-        }
-
-        return true;
-    }
+	newPrevDataFiles: {
+		modifiedAdded: string[];
+		deleted: string[];
+	};
+	constructor(public plugin: SmartSyncPlugin) {
+		this.plugin = plugin;
+		this.newPrevDataFiles = {
+			modifiedAdded: [],
+			deleted: [],
+		};
+	}
+
+	/**
+	 * Configure and create SmartSync client
+	 */
+	configSmartSync(url: string, port: number, authToken?: string): SmartSyncClient {
+		if (!url) {
+			throw new Error("Missing SmartSync URL");
+		}
+
+		return new SmartSyncClient(
+			{
+				serverUrl: url,
+				port: port || 443,
+				authToken,
+			},
+			this.plugin
+		);
+	}
+
+	async downloadFiles(filesMap: FileList): Promise<void> {
+		if (!filesMap || Object.keys(filesMap).length === 0) {
+			this.plugin.log("No files to download");
+			return;
+		}
+
+		// First attempt for all files
+		const results = await Promise.all(
+			Object.entries(filesMap).map(async ([filePath, _]) => ({
+				filePath,
+				success: await this.downloadFile(filePath),
+			}))
+		);
+
+		// Filter out failed downloads and retry them
+		const failedDownloads = results.filter((r) => !r.success);
+		if (failedDownloads.length > 0) {
+			console.log(`Retrying ${failedDownloads.length} failed downloads...`);
+			await Promise.all(failedDownloads.map(({ filePath }) => this.downloadFile(filePath)));
+		}
+	}
+
+	private async downloadFile(filePath: string): Promise<boolean> {
+		try {
+			// Verify remote file exists by checking if server is online
+			const status = await this.plugin.smartSyncClient.getStatus();
+			if (!status.online) {
+				console.error(`Remote server is offline, cannot download ${filePath}`);
+				return false;
+			}
+
+			// Download with retry
+			const fileData = await this.downloadWithRetry(filePath);
+			if (fileData.status !== 200) {
+				throw new Error(`Failed to download ${filePath}: ${fileData.status}`);
+			}
+			await this.ensureLocalDirectory(dirname(filePath));
+			await this.plugin.app.vault.adapter.writeBinary(filePath, fileData.data);
+			this.plugin.processed();
+			this.newPrevDataFiles.modifiedAdded.push(filePath);
+			return true;
+		} catch (error) {
+			this.plugin.log(`Error downloading ${filePath}:`, error);
+			return false;
+		}
+	}
+
+	// Helper methods
+	private async downloadWithRetry(
+		remotePath: string,
+		maxRetries = 2
+	): Promise<{
+		data: ArrayBuffer;
+		status: number;
+	}> {
+		for (let attempt = 1; attempt <= maxRetries; attempt++) {
+			try {
+				return await this.plugin.smartSyncClient.getFile(remotePath);
+			} catch (error) {
+				if (attempt === maxRetries) throw error;
+				console.log(`Retry ${attempt} for ${remotePath}`);
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
+		}
+		throw new Error(`Failed to download after ${maxRetries} attempts`);
+	}
+
+	private async ensureLocalDirectory(path: string): Promise<void> {
+		const parts = normalizePath(path).split("/").filter(Boolean);
+		let current = "";
+		for (const part of parts) {
+			current = current ? `${current}/${part}` : part;
+			if (!(await this.plugin.app.vault.adapter.exists(current))) {
+				await this.plugin.app.vault.createFolder(current);
+			}
+		}
+	}
+
+	/**
+	 * Upload files to SmartSyncServer
+	 */
+	async uploadFiles(fileChecksums: FileList): Promise<void> {
+		if (!fileChecksums || Object.keys(fileChecksums).length === 0) {
+			this.plugin.log("No files to upload");
+			return;
+		}
+
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		for (const [localFilePath, _] of Object.entries(fileChecksums)) {
+			await this.uploadFile(localFilePath);
+		}
+
+		this.plugin.log("Upload completed");
+	}
+
+	/**
+	 * Upload a single file to SmartSyncServer
+	 */
+	private async uploadFile(filePath: string): Promise<void> {
+		try {
+			const fileContent = await this.plugin.app.vault.adapter.readBinary(normalizePath(filePath));
+
+			if (await this.plugin.smartSyncClient.uploadFile(filePath, fileContent)) {
+				this.plugin.processed();
+				this.newPrevDataFiles.modifiedAdded.push(filePath);
+				this.plugin.log(`Uploaded: ${filePath}`);
+			}
+		} catch (error) {
+			console.error(`Error uploading ${filePath}:`, error);
+		}
+	}
+
+	/**
+	 * Delete files from SmartSyncServer
+	 */
+	async deleteFilesRemote(fileTree: FileList): Promise<void> {
+		if (!fileTree || Object.keys(fileTree).length === 0) {
+			this.plugin.log("No files to delete on remote");
+			return;
+		}
+
+		const failedPaths: string[] = [];
+
+		const deleteFile = async (path: string): Promise<void> => {
+			const cleanPath = path.endsWith("/") ? path.replace(/\/$/, "") : path;
+			const fullPath = join(this.plugin.baseRemotePath, cleanPath);
+
+			try {
+				const response = await this.plugin.smartSyncClient.deleteFile(fullPath);
+				if (response !== 200 && response !== 204 && response !== 404) {
+					console.log(fullPath, " Error status: ", response);
+					failedPaths.push(fullPath);
+					return;
+				}
+				this.plugin.processed();
+				this.newPrevDataFiles.deleted.push(path);
+			} catch (error) {
+				console.error(`Delete failed for ${cleanPath}:`, error);
+				failedPaths.push(fullPath);
+			}
+		};
+
+		const retryDelete = async (path: string): Promise<void> => {
+			try {
+				const status = await this.plugin.smartSyncClient.getStatus();
+				if (!status.online) {
+					console.log(`Server offline for ${path}, skipping delete retry`);
+					this.plugin.processed();
+					this.newPrevDataFiles.deleted.push(path);
+					return;
+				}
+
+				const response = await this.plugin.smartSyncClient.deleteFile(path);
+				if (response === 200 || response === 204 || response === 404) {
+					this.plugin.processed();
+					this.newPrevDataFiles.deleted.push(path);
+					this.plugin.log(`Retry successful: ${path}`);
+				} else {
+					console.log(`Delete still failed for ${path}, status: ${response}`);
+				}
+			} catch (error) {
+				console.error(`Final delete attempt failed for ${path}:`, error);
+			}
+		};
+
+		// First attempt for all files
+		await Promise.all(Object.keys(fileTree).map(deleteFile));
+
+		// Retry failed deletions
+		if (failedPaths.length > 0) {
+			console.log(`Retrying ${failedPaths.length} failed deletions...`);
+			await Promise.all(failedPaths.map(retryDelete));
+		}
+	}
+
+	/**
+	 * Delete files from local storage
+	 */
+	async deleteFilesLocal(fileTree: FileList): Promise<void> {
+		if (!fileTree || Object.keys(fileTree).length === 0) {
+			this.plugin.log("No files to delete locally");
+			return;
+		}
+
+		for (const file of Object.keys(fileTree)) {
+			await this.deleteLocalFile(file);
+		}
+	}
+
+	private async deleteLocalFile(file: string): Promise<void> {
+		try {
+			if (this.plugin.mobile) {
+				await this.plugin.app.vault.adapter.trashLocal(file);
+			} else {
+				await this.plugin.app.vault.adapter.trashSystem(file);
+			}
+			this.plugin.processed();
+			this.newPrevDataFiles.deleted.push(file);
+		} catch (error) {
+			console.error(`Error deleting local file ${file}:`, error);
+		}
+	}
+
+	private async ensureRemoteDirectory(path: string): Promise<void> {
+		try {
+			console.log(`Creating remote directory: ${path}`);
+			const cleanPath = path.replace(/\/$/, ""); // Remove trailing slash for folder creation
+			const fullPath = join(this.plugin.baseRemotePath, cleanPath);
+			const response = await this.plugin.smartSyncClient.createFolder(fullPath);
+			if (!response) {
+				throw new Error(`Failed to create remote directory ${path}`);
+			}
+		} catch (error) {
+			console.error(`Error creating remote directory ${path}:`, error);
+		}
+	}
+
+	async test(show = true, verbose = false) {
+		if (this.plugin.status === Status.TEST) {
+			return;
+		}
+		try {
+			show && this.plugin.setStatus(Status.TEST);
+			verbose && this.plugin.show(`${Status.TEST} Testing ...`);
+
+			const status = await this.plugin.smartSyncClient.establishConnection(show);
+
+			// Check if online field exists and is true
+			if (status) {
+				verbose && this.plugin.show("Connection successful");
+				// ALWAYS set status to NONE after successful test, regardless of show parameter
+				show && this.plugin.setStatus(Status.NONE);
+
+				if (this.plugin.prevData.error) {
+					this.plugin.show("Clear your ERROR state manually!");
+					this.plugin.setStatus(Status.ERROR);
+				}
+				return true;
+			}
+			console.log("[TEST] Connection failed");
+			show && this.plugin.show("Connection failed: Server is offline");
+			this.plugin.setStatus(Status.OFFLINE);
+
+			return false;
+		} catch (error) {
+			console.error("[TEST] Connection test failed with error:", error);
+			show && this.plugin.show(`SmartSync connection test failed. Error: ${error}`);
+			console.error("Failed miserably", error);
+			this.plugin.setStatus(Status.ERROR);
+			this.plugin.setError(true);
+			return false;
+		}
+	}
+
+	/**
+	 * This creates a list of files with predefined actions to take
+	 * @param show
+	 * @param exclude
+	 * @returns
+	 */
+	async check(show = true, exclude = true) {
+		if (this.plugin.status !== Status.NONE && this.plugin.status !== Status.OFFLINE) {
+			show && this.plugin.show(`Checking not possible, currently ${this.plugin.status}`);
+			return;
+		}
+
+		this.plugin.setStatus(Status.CHECK);
+		show && this.plugin.show(`${Status.CHECK} Checking ...`);
+
+		let response;
+		const stats = {
+			startTime: Date.now(),
+			testTime: 0,
+			remoteScanTime: 0,
+			localScanTime: 0,
+			compareTime: 0,
+			totalTime: 0,
+			fileCounts: {
+				remote: 0,
+				local: 0,
+			},
+			hashStats: {
+				totalFiles: 0,
+				sources: {
+					prevData: 0,
+					calculated: 0,
+					cache: 0,
+				},
+				excluded: 0,
+			},
+		};
+
+		try {
+			// Test connection
+			const testStart = Date.now();
+			response = await this.test(false);
+			stats.testTime = Date.now() - testStart;
+
+			if (!response) {
+				show &&
+					logNotice(
+						`Testing failed, can't continue Check action!\nStatus: ${STATUS_ITEMS[this.plugin.status].label} ${this.plugin.status}`
+					);
+				return false;
+			}
+
+			this.plugin.checkTime = Date.now();
+
+			// Generate file hash trees with timing
+			const remoteStart = Date.now();
+			const remotePromise = this.plugin.checksum.generateRemoteHashTree(this.plugin.smartSyncClient);
+
+			const localStart = Date.now();
+			const localPromise = this.plugin.checksum.generateLocalHashTree(exclude);
+
+			const [remote, local] = await Promise.all([remotePromise, localPromise]);
+
+			stats.remoteScanTime = remote.end - remoteStart;
+			stats.localScanTime = local.end - localStart;
+			stats.fileCounts.remote = Object.keys(remote.files).length;
+			stats.fileCounts.local = Object.keys(local.files).length;
+
+			// Update hash statistics from checksum
+			if (this.plugin.hashStats) {
+				stats.hashStats = this.plugin.hashStats;
+			}
+
+			// Compare file trees
+			const compareStart = Date.now();
+			this.plugin.allFiles.local = local.files;
+			this.plugin.allFiles.remote = remote.files;
+			this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remote.files, local.files);
+			stats.compareTime = Date.now() - compareStart;
+
+			const ok = this.dangerCheck();
+
+			// Calculate total time
+			stats.totalTime = Date.now() - stats.startTime;
+
+			// Log performance statistics
+			this.plugin.log(`=== CHECK PERFORMANCE STATISTICS ===`);
+			this.plugin.log(`Total time: ${stats.totalTime}ms`);
+			this.plugin.log(`Connection test: ${stats.testTime}ms`);
+			this.plugin.log(`Remote scan: ${stats.remoteScanTime}ms (${stats.fileCounts.remote} files)`);
+			this.plugin.log(`Local scan: ${stats.localScanTime}ms (${stats.fileCounts.local} files)`);
+			this.plugin.log(`Comparison: ${stats.compareTime}ms`);
+			this.plugin.log(
+				`Files per second (Remote): ${Math.round((stats.fileCounts.remote / stats.remoteScanTime) * 1000)}`
+			);
+			this.plugin.log(
+				`Files per second (Local): ${Math.round((stats.fileCounts.local / stats.localScanTime) * 1000)}`
+			);
+
+			// Log hash statistics
+			if (stats.hashStats) {
+				const hashPercentage =
+					stats.hashStats.totalFiles > 0
+						? Math.round(
+								((stats.hashStats.sources.prevData + stats.hashStats.sources.cache) /
+									stats.hashStats.totalFiles) *
+									100
+							)
+						: 0;
+				this.plugin.log(`\n=== HASH OPTIMIZATION STATISTICS ===`);
+				this.plugin.log(`Total files processed: ${stats.hashStats.totalFiles}`);
+				this.plugin.log(`Hashes from prevData: ${stats.hashStats.sources.prevData}`);
+				this.plugin.log(`Hashes from cache: ${stats.hashStats.sources.cache} (${hashPercentage}% optimized)`);
+				this.plugin.log(`Hashes calculated: ${stats.hashStats.sources.calculated}`);
+				this.plugin.log(`Files excluded: ${stats.hashStats.excluded}`);
+				this.plugin.log(`Optimization rate: ${hashPercentage}% - Higher is better!`);
+				this.plugin.log(`===============================`);
+			}
+
+			show && ok && this.plugin.show(`Finished checking files after ${calcDuration(this.plugin.checkTime)} s`);
+			if (show && ok) {
+				if (this.plugin.calcTotal(this.plugin.fileTrees.local.except) > 0) {
+					this.plugin.show(
+						"Found file sync exceptions! Open SmartSync Control Panel and either PUSH/PULL or resolve each case separately!",
+						5000
+					);
+				}
+			}
+			this.plugin.lastScrollPosition = 0;
+			// this.plugin.tempExcludedFiles = {};
+			this.plugin.modal?.renderFileTrees();
+			ok && this.plugin.setStatus(Status.NONE);
+			return true;
+		} catch (error) {
+			console.error("CHECK ERROR: ", error);
+			show && this.plugin.show(`CHECK ERROR: ${error}`);
+			this.plugin.setError(true);
+			response ? this.plugin.setStatus(Status.ERROR) : this.plugin.setStatus(Status.OFFLINE);
+			throw error;
+		}
+	}
+
+	async saveAndCheck() {
+		// Test connection
+		if (!(await this.plugin.operations.test(false))) return false;
+
+		// Scan both in parallel
+		const [remote, local] = await Promise.all([
+			this.plugin.checksum.generateRemoteHashTree(this.plugin.smartSyncClient),
+			this.plugin.checksum.generateLocalHashTree(true),
+		]);
+
+		// Compare
+		// this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remote.files, local.files);
+
+		// Save ONLY selected, non-excluded files to prevData
+
+		this.plugin.allFiles.local = local.files;
+		this.plugin.allFiles.remote = remote.files;
+		this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remote.files, local.files);
+
+		const saveableFiles: any = { ...local.files };
+
+		for (const path of Object.keys(this.plugin.fileSelection)) {
+			if (this.plugin.fileSelection[path].selected === false) {
+				if (path in this.plugin.prevData.files) {
+					saveableFiles[path] = this.plugin.prevData.files[path]; // Keep old state
+				} else {
+					delete saveableFiles[path]; // Remove if wasn't in prevData
+				}
+			}
+		}
+
+		const newExcept = this.plugin.compare.checkExistKey(this.plugin.fileTrees.local.except, saveableFiles);
+
+		const now = msToSeconds(Date.now());
+
+		this.plugin.prevData = {
+			error: this.plugin.prevData.error,
+			files: saveableFiles,
+			except: newExcept,
+			timestamps: {
+				prevdataUpdate: now,
+				lastFullSync: now,
+				lastFileSync: now,
+			},
+		};
+
+		this.plugin.lastScrollPosition = 0;
+		this.plugin.modal?.renderFileTrees();
+
+		this.plugin.app.vault.adapter.write(this.plugin.prevPath, JSON.stringify(this.plugin.prevData, null, 2));
+		this.plugin.show("Saved state and checked for differences");
+		return true;
+	}
+
+	/**
+	 * Filter fileTrees to only include selected files
+	 */
+	private filterSelectedFiles(fileTrees: FileTrees): FileTrees {
+		const fileSelection = this.plugin.fileSelection;
+
+		if (!fileSelection || Object.keys(fileSelection).length === 0) {
+			// No selection filter, return original
+			return fileTrees;
+		}
+
+		const filterFileList = (fileList: FileList): FileList => {
+			const filtered: FileList = {};
+			for (const [path, hash] of Object.entries(fileList)) {
+				// Include file if fileSelection[path] is true or undefined (not in list = sync all)
+				const fileData = fileSelection[path];
+				if (!fileData || fileData.selected !== false) {
+					filtered[path] = hash;
+				}
+			}
+			return filtered;
+		};
+
+		const filterFileTree = (fileTree: FileTree): FileTree => {
+			return {
+				added: filterFileList(fileTree.added),
+				deleted: filterFileList(fileTree.deleted),
+				modified: filterFileList(fileTree.modified),
+				except: filterFileList(fileTree.except),
+			};
+		};
+
+		return {
+			remote: filterFileTree(fileTrees.remote),
+			local: filterFileTree(fileTrees.local),
+		};
+	}
+
+	/**
+	 * Main Sync function for this plugin. This manages all file exchanging
+	 * @param controller
+	 * @param show
+	 * @returns
+	 */
+	async sync(controller: Controller, show = true, postSync: PostSync = "saveAndCheck") {
+		console.log("[SYNC] Starting sync, show:", show, "controller:", controller);
+		if (this.plugin.prevData.error) {
+			console.log("[SYNC] Blocked by error state");
+			show &&
+				this.plugin.show(
+					"Error detected - please clear in control panel or force action by retriggering action"
+				);
+			return;
+		}
+
+		try {
+			this.plugin.isSyncing = true;
+			console.log("[SYNC] Testing connection...");
+			if (!(await this.test(false))) {
+				console.log("[SYNC] Connection test failed, aborting sync");
+				show && this.plugin.show("Connection Problem detected!");
+				return;
+			}
+			console.log("[SYNC] Connection test passed, current status:", this.plugin.status);
+
+			if (this.plugin.status !== Status.NONE) {
+				show && this.plugin.show(`Operation not possible, currently working on '${this.plugin.status}'`);
+				return;
+			}
+
+			this.newPrevDataFiles = {
+				modifiedAdded: [],
+				deleted: [],
+			};
+
+			if (!this.plugin.fileTrees) {
+				show && this.plugin.show("Checking files before operation...");
+				const response = await this.check(show);
+				console.log("SYNC CHECK FAIL CORRECT");
+				if (!response) {
+					return;
+				}
+			}
+
+			this.plugin.setStatus(Status.SYNC);
+
+			// Filter fileTrees to only include selected files
+			const fileTreesSelected = this.filterSelectedFiles(this.plugin.fileTrees);
+
+			// Calculate total operations needed
+			const operationsToCount = [];
+
+			// Calculate total operations needed (explicit counting)
+			let total = 0;
+
+			// INTERIM START
+			// Count files that will actually be processed
+			for (const [_path, selection] of Object.entries(this.plugin.fileSelection)) {
+				// Skip unselected files
+				if (!selection.selected) continue;
+
+				// Count based on controller settings
+				if (controller.remote?.added && selection.location === "remote" && selection.diffType === "added") {
+					total++;
+				}
+				if (
+					controller.remote?.modified &&
+					selection.location === "remote" &&
+					selection.diffType === "modified"
+				) {
+					total++;
+				}
+				if (controller.remote?.deleted && selection.location === "remote" && selection.diffType === "deleted") {
+					total++;
+				}
+				if (controller.remote?.except && selection.location === "remote" && selection.diffType === "except") {
+					total++;
+				}
+				if (controller.local?.added && selection.location === "local" && selection.diffType === "added") {
+					total++;
+				}
+				if (controller.local?.modified && selection.location === "local" && selection.diffType === "modified") {
+					total++;
+				}
+				if (controller.local?.deleted && selection.location === "local" && selection.diffType === "deleted") {
+					total++;
+				}
+				if (controller.local?.except && selection.location === "local" && selection.diffType === "except") {
+					total++;
+				}
+			}
+			// INTERIM END
+
+			if (total === 0) {
+				if (Object.keys(fileTreesSelected.local.except).length > 0) {
+					show &&
+						this.plugin.show("You have file sync exceptions. Clear them in SmartSync Control Panel.", 5000);
+				} else {
+					show && this.plugin.show("No files to sync");
+				}
+				this.plugin.setStatus(Status.NONE);
+				return;
+			}
+			this.plugin.statusBar2.setText(" 0/" + this.plugin.loadingTotal);
+
+			show && this.plugin.show("Synchronising...");
+
+			const operations: Promise<void>[] = [];
+
+			// Handle Remote operations
+			if (controller.remote) {
+				if (controller.remote.added === 1) {
+					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remote.added));
+				} else if (controller.remote.added === -1) {
+					operations.push(this.plugin.operations.deleteFilesRemote(fileTreesSelected.remote.added));
+				}
+
+				if (controller.remote.deleted === 1) {
+					operations.push(this.plugin.operations.deleteFilesLocal(fileTreesSelected.remote.deleted));
+				} else if (controller.remote.deleted === -1) {
+					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remote.deleted));
+				}
+
+				if (controller.remote.modified === 1) {
+					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remote.modified));
+				} else if (controller.remote.modified === -1) {
+					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remote.modified));
+				}
+
+				if (controller.remote.except === 1) {
+					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.remote.except));
+				} else if (controller.remote.except === -1) {
+					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.remote.except));
+				}
+			}
+
+			// Handle Local operations
+			if (controller.local) {
+				if (controller.local.added === 1) {
+					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.local.added));
+				} else if (controller.local.added === -1) {
+					operations.push(this.plugin.operations.deleteFilesLocal(fileTreesSelected.local.added));
+				}
+
+				if (controller.local.deleted === 1) {
+					operations.push(this.plugin.operations.deleteFilesRemote(fileTreesSelected.local.deleted));
+				} else if (controller.local.deleted === -1) {
+					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.local.deleted));
+				}
+
+				if (controller.local.modified === 1) {
+					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.local.modified));
+				} else if (controller.local.modified === -1) {
+					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.local.modified));
+				}
+
+				if (controller.local.except === 1) {
+					operations.push(this.plugin.operations.uploadFiles(fileTreesSelected.local.except));
+				} else if (controller.local.except === -1) {
+					operations.push(this.plugin.operations.downloadFiles(fileTreesSelected.local.except));
+				}
+			}
+
+			// Execute all operations concurrently
+			await Promise.all(operations);
+			this.plugin.setStatus(Status.NONE);
+
+			if (postSync === "check") {
+				show && this.plugin.show("Sync completed - checking again");
+				await this.plugin.saveState();
+				await this.check(true);
+			} else if (postSync === "prevSuccess") {
+				for (const filePath in this.newPrevDataFiles.modifiedAdded) {
+					const statPromise = this.plugin.app.vault.adapter.stat(filePath);
+					const readPromise = this.plugin.app.vault.adapter.readBinary(filePath);
+					const [stat, data] = await Promise.all([statPromise, readPromise]);
+					if (!stat || !data) {
+						console.error("No stat or data available for postSync " + postSync);
+						continue;
+					}
+
+					this.plugin.prevData.files[filePath] = {
+						hash: await sha256(data),
+						size: stat.size,
+						mtime: msToSeconds(stat.mtime),
+					};
+				}
+				for (const filePath in this.newPrevDataFiles.deleted) {
+					delete this.plugin.prevData.files[filePath];
+				}
+
+				const now = msToSeconds(Date.now());
+
+				this.plugin.prevData.timestamps = {
+					...this.plugin.prevData.timestamps,
+					prevdataUpdate: now,
+					lastFileSync: now,
+					lastFullSync: now,
+				};
+
+				await this.plugin.savePrevData();
+			} else if (postSync === "saveAndCheck") {
+				await this.saveAndCheck();
+			}
+			this.plugin.sessionSynced = true;
+			// this.plugin.tempExcludedFiles = {};
+
+			show && this.plugin.show("Done");
+			this.plugin.setStatus(Status.NONE);
+		} catch (error) {
+			console.error("SYNC", error);
+			show && this.plugin.show(`SYNC Error: ${error}`);
+			this.plugin.setError(true);
+			this.plugin.setStatus(Status.ERROR);
+		} finally {
+			this.plugin.isSyncing = false;
+			this.plugin.finished();
+		}
+	}
+
+	async duplicateLocal() {
+		this.plugin.show("Duplicating local Vault ...");
+		await this.sync({
+			local: {
+				added: 1,
+				deleted: 1,
+				modified: 1,
+				except: 1,
+			},
+			remote: {
+				added: -1,
+				deleted: -1,
+				modified: -1,
+			},
+		});
+	}
+
+	async duplicateRemote() {
+		this.plugin.show("Duplicating Remote Vault ...");
+		await this.plugin.operations.sync({
+			local: {
+				added: -1,
+				deleted: -1,
+				modified: -1,
+			},
+			remote: {
+				added: 1,
+				deleted: 1,
+				modified: 1,
+				except: 1,
+			},
+		});
+	}
+
+	async push() {
+		this.sync({
+			local: {
+				added: 1,
+				deleted: 1,
+				modified: 1,
+				except: 1,
+			},
+			remote: {},
+		});
+	}
+
+	async pull() {
+		this.sync({
+			local: {},
+			remote: {
+				added: 1,
+				deleted: 1,
+				modified: 1,
+				except: 1,
+			},
+		});
+	}
+
+	async fullSync() {
+		this.sync({
+			local: {
+				added: 1,
+				deleted: 1,
+				modified: 1,
+			},
+			remote: {
+				added: 1,
+				deleted: 1,
+				modified: 1,
+			},
+		});
+	}
+
+	async fullSyncSilent() {
+		this.sync(
+			{
+				local: {
+					added: 1,
+					deleted: 1,
+					modified: 1,
+				},
+				remote: {
+					added: 1,
+					deleted: 1,
+					modified: 1,
+				},
+			},
+			false
+		);
+	}
+
+	dangerCheck() {
+		const max = 15;
+		let counter = 0;
+
+		Object.keys(this.plugin.fileTrees.local.deleted).forEach((v) => {
+			if (v.startsWith(".obsidian")) {
+				counter++;
+			}
+		});
+		if (counter > max) {
+			this.plugin.errorWrite();
+			this.plugin.show(`WARNING! DANGEROUS AMOUNT OF SYSTEM FILES HAVE PENDING DELETION (${counter})`, 5000);
+			this.plugin.setStatus(Status.ERROR);
+			return false;
+		}
+
+		return true;
+	}
 }

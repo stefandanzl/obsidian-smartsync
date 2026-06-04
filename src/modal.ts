@@ -5,724 +5,735 @@ import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, DiffTyp
 import { dirname } from "./util";
 
 export class FileTreeModal extends Modal {
-    fileTreeDiv: HTMLDivElement;
-    dropdownContainer: HTMLDivElement;
-    statusIndicator: HTMLSpanElement;
-    actionsVisible = false;
-    private toggleActionsItem?: HTMLButtonElement;
-
-    constructor(
-        app: App,
-        public plugin: SmartSyncPlugin
-    ) {
-        super(app);
-    }
-
-    onOpen() {
-        const { titleEl, modalEl, contentEl } = this;
-
-        modalEl.addClass("smart-sync-modal");
-        titleEl.setText("SmartSync");
-
-        // Container for floating dropdowns (context menus)
-        this.dropdownContainer = contentEl.createDiv({ cls: "smart-sync-dropdowns-container" });
-
-        const container = contentEl.createDiv({ cls: "smart-sync-container" });
-
-        // ============= HEADER =============
-        const header = container.createDiv({ cls: "smart-sync-header" });
-
-        const selectToggleBtn = header.createEl("button", {
-            text: "☑️ Select All",
-            cls: "smart-sync-header-btn",
-        });
-        selectToggleBtn.addEventListener("click", () => this.toggleSelectAll(selectToggleBtn));
-
-        // Status indicator in the center
-        this.statusIndicator = header.createSpan({
-            cls: "smart-sync-status-indicator",
-        });
-        this.updateStatusIndicator();
-
-        const reloadBtn = header.createEl("button", {
-            text: "🔄 Reload",
-            cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
-        });
-        reloadBtn.addEventListener("click", async () => {
-            await this.plugin.operations.check();
-            this.updateSyncButton();
-        });
-
-        // ============= FILES AREA =============
-        this.fileTreeDiv = container.createDiv({ cls: "smart-sync-files-area" });
-
-        // Save scroll position
-        this.fileTreeDiv.addEventListener("scroll", (e) => {
-            this.plugin.lastScrollPosition = (e.target as HTMLElement).scrollTop;
-        });
-
-        // ============= FOOTER =============
-        const footer = container.createDiv({ cls: "smart-sync-footer" });
-
-        // Left side - empty for balance
-        footer.createDiv({ cls: "smart-sync-footer-spacer" });
-
-        // Center - Sync Button
-        this.syncButton = footer.createEl("button", {
-            text: `🔄 Sync (0)`,
-            cls: ["smart-sync-footer-btn", "smart-sync-primary-btn"],
-        });
-        this.syncButton.addEventListener("click", () => this.syncSelected());
-
-        // Right side - Action buttons
-        const rightActions = footer.createDiv({ cls: "smart-sync-footer-right" });
-
-        // Special Actions Dropdown
-        const specialActionsBtn = rightActions.createEl("button", {
-            text: "⚡ Actions",
-            cls: "smart-sync-footer-btn",
-        });
-        this.createDropdown(specialActionsBtn, [
-            {
-                label: "Show Individual File Actions",
-                action: () => this.toggleActionSelects(),
-                updateLabel: (itemEl) => (this.toggleActionsItem = itemEl),
-            },
-            {
-                label: "📋 Replicate Local → Remote",
-                action: () => this.confirmAndRun("Replicate local on remote", () => this.plugin.operations.duplicateLocal()),
-            },
-            {
-                label: "🌐 Replicate Remote → Local",
-                action: () => this.confirmAndRun("Replicate remote on local", () => this.plugin.operations.duplicateRemote()),
-            },
-            { label: "⬆️ Push Selected", action: () => this.confirmAndRun("Push selected files", () => this.pushSelected()) },
-            { label: "⬇️ Pull Selected", action: () => this.confirmAndRun("Pull selected files", () => this.pullSelected()) },
-        ]);
-
-        // // Toggle explicit action selects
-        // const toggleActionsBtn = header.createEl("button", {
-        //     text: "⚙️Show Actions",
-        //     cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
-        // });
-        // toggleActionsBtn.addEventListener("click", () => this.toggleActionSelects(toggleActionsBtn));
-
-        // Maintenance Dropdown
-        const maintenanceBtn = rightActions.createEl("button", {
-            text: "🔧",
-            cls: "smart-sync-footer-btn",
-            title: "Maintenance",
-        });
-        this.createDropdown(maintenanceBtn, [
-            { label: "🔌 Test Connection", action: () => this.plugin.operations.test(true, true) },
-            { label: "❌ Clear Error States", action: () => this.clearErrors() },
-            { label: "💾 Save Vault State", action: () => this.plugin.saveState() },
-            { label: "⚙️ SmartSync Settings", action: () => this.openSettings() },
-            { label: "⏸️ Pause Sync", action: () => this.togglePause() },
-        ]);
-
-        // Close dropdowns when clicking outside
-        document.addEventListener("click", (e) => {
-            if (!(e.target as HTMLElement).closest(".smart-sync-dropdown, .smart-sync-menu-btn")) {
-                this.closeAllDropdowns();
-            }
-        });
-
-        // Load and render files
-        if (!this.plugin.fileTrees) {
-            this.plugin.operations.check().then(() => this.updateSyncButton());
-        } else {
-            this.renderFileTrees();
-            this.updateSyncButton();
-        }
-    }
-
-    private syncButton: HTMLButtonElement;
-
-    private toggleSelectAll(btn: HTMLButtonElement) {
-        const allPaths = this.getAllFilePaths();
-        const allSelected = allPaths.length > 0 && allPaths.every((path) => this.plugin.fileSelection[path]?.selected === true);
-
-        if (allSelected) {
-            // Deselect all
-            for (const path of allPaths) {
-                if (this.plugin.fileSelection[path]) {
-                    this.plugin.fileSelection[path].selected = false;
-                }
-            }
-            btn.textContent = "☑️ Select All";
-        } else {
-            // Select all
-            for (const path of allPaths) {
-                if (this.plugin.fileSelection[path]) {
-                    this.plugin.fileSelection[path].selected = true;
-                }
-            }
-            btn.textContent = "☐ Select None";
-        }
-        this.renderFileTrees();
-        this.updateSyncButton();
-    }
-
-    private toggleFileSelection(path: string) {
-        if (this.plugin.fileSelection[path]) {
-            this.plugin.fileSelection[path].selected = !this.plugin.fileSelection[path].selected;
-        }
-        this.updateSyncButton();
-    }
-
-    private updateSyncButton() {
-        const count = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
-        this.syncButton.textContent = `🔄 Sync (${count})`;
-    }
-
-    private initializeSelectedFiles() {
-        if (!this.plugin.fileTrees) return;
-
-        // First, collect all current paths from fileTrees
-        const currentPaths = new Set<string>();
-        const locations: (keyof FileTrees)[] = ["localFiles", "remoteFiles"];
-        const types: (keyof FileTree)[] = ["added", "modified", "deleted", "except"];
-
-        for (const locationKey of locations) {
-            for (const typeKey of types) {
-                const files = this.plugin.fileTrees[locationKey][typeKey];
-                for (const [path] of Object.entries(files)) {
-                    currentPaths.add(path);
-                    // Only add if not already present (preserve existing selections)
-                    if (!this.plugin.fileSelection[path]) {
-                        this.plugin.fileSelection[path] = {
-                            location: locationKey,
-                            diffType: typeKey,
-                            selected: true, // Default to selected
-                            explicitAction: undefined,
-                        };
-                    }
-                }
-            }
-        }
-
-        // Remove entries for files that are no longer in fileTrees
-        for (const path of Object.keys(this.plugin.fileSelection)) {
-            if (!currentPaths.has(path)) {
-                delete this.plugin.fileSelection[path];
-            }
-        }
-    }
-
-    updateStatusIndicator() {
-        const status = this.plugin.status;
-        const statusItem = STATUS_ITEMS[status];
-        this.statusIndicator.textContent = `${statusItem.emoji} ${statusItem.label}`;
-        this.statusIndicator.setCssProps({ color: statusItem.color });
-    }
-
-    private getAllFilePaths(): string[] {
-        const paths: string[] = [];
-        if (!this.plugin.fileTrees) return paths;
-
-        ["remoteFiles", "localFiles"].forEach((location) => {
-            const locationData = this.plugin.fileTrees[location as keyof FileTrees];
-            ["added", "deleted", "modified"].forEach((type) => {
-                Object.keys(locationData[type as keyof FileTree]).forEach((path) => {
-                    paths.push(path);
-                });
-            });
-        });
-        return paths;
-    }
-
-    private createDropdown(
-        button: HTMLButtonElement,
-        items: { label: string; action: () => void; updateLabel?: (itemEl: HTMLButtonElement) => void }[]
-    ): void {
-        const dropdown = document.createElement("div");
-        dropdown.addClass("smart-sync-dropdown");
-        this.dropdownContainer.appendChild(dropdown);
-
-        const dropdownContent = dropdown.createDiv({ cls: "smart-sync-dropdown-content" });
-
-        items.forEach((item) => {
-            const itemEl = dropdownContent.createEl("button", {
-                text: item.label,
-                cls: "smart-sync-dropdown-item",
-            });
-            if (item.updateLabel) {
-                item.updateLabel(itemEl);
-            }
-            itemEl.addEventListener("click", (e) => {
-                e.stopPropagation();
-                this.closeAllDropdowns();
-                item.action();
-            });
-        });
-
-        button.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const isOpen = dropdown.hasClass("open");
-            this.closeAllDropdowns();
-            if (!isOpen) {
-                const rect = button.getBoundingClientRect();
-                // Position above the button
-                dropdown.style.bottom = window.innerHeight - rect.top + 8 + "px";
-                dropdown.style.left = rect.left + rect.width / 2 - 90 + "px";
-                dropdown.addClass("open");
-            }
-        });
-    }
-
-    private closeAllDropdowns() {
-        this.dropdownContainer.querySelectorAll(".smart-sync-dropdown.open").forEach((el) => {
-            el.removeClass("open");
-            (el as HTMLElement).style.bottom = "";
-            (el as HTMLElement).style.left = "";
-        });
-        this.dropdownContainer.querySelectorAll(".smart-sync-context-menu.open").forEach((el) => {
-            el.removeClass("open");
-            (el as HTMLElement).style.top = "";
-            (el as HTMLElement).style.right = "";
-        });
-    }
-
-    private confirmAndRun(actionName: string, action: () => void) {
-        const confirm = new Modal(this.app);
-        confirm.contentEl.createEl("p", {
-            text: `Are you sure you want to ${actionName.toLowerCase()}?`,
-            cls: "smart-sync-confirm-text",
-        });
-
-        const btnContainer = confirm.contentEl.createDiv({ cls: "smart-sync-confirm-buttons" });
-
-        const yesBtn = btnContainer.createEl("button", {
-            text: "Yes",
-            cls: ["mod-cta", "smart-sync-confirm-btn"],
-        });
-        yesBtn.addEventListener("click", () => {
-            action();
-            confirm.close();
-        });
-
-        const noBtn = btnContainer.createEl("button", {
-            text: "No",
-            cls: "smart-sync-confirm-btn",
-        });
-        noBtn.addEventListener("click", () => confirm.close());
-
-        confirm.open();
-    }
-
-    private async syncSelected() {
-        const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
-        if (selectedCount === 0) {
-            new Notice("No files selected");
-            return;
-        }
-        this.plugin.operations.fullSync();
-    }
-
-    private async pushSelected() {
-        const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
-        new Notice(`Pushing ${selectedCount} files`);
-        this.plugin.operations.push();
-    }
-
-    private async pullSelected() {
-        const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
-        new Notice(`Pulling ${selectedCount} files`);
-        this.plugin.operations.pull();
-    }
-
-    private clearErrors() {
-        this.plugin.prevData.error = false;
-        this.plugin.setStatus(Status.NONE);
-        new Notice("Error states cleared");
-    }
-
-    private openSettings() {
-        this.plugin.settingPrivate.openTabById(PLUGIN_ID);
-        this.plugin.settingPrivate.open();
-    }
-
-    private togglePause() {
-        this.plugin.togglePause();
-    }
-
-    private toggleActionSelects(btn?: HTMLButtonElement) {
-        this.actionsVisible = !this.actionsVisible;
-        this.fileTreeDiv.querySelectorAll(".smart-sync-action-select").forEach((el) => {
-            el.toggleClass("hidden", !this.actionsVisible);
-        });
-        const label = this.actionsVisible ? "Hide Individual Actions" : "Show Individual Actions";
-        if (btn) {
-            btn.textContent = this.actionsVisible ? "⚙️ Hide Actions" : "⚙️Show Actions";
-        }
-        if (this.toggleActionsItem) {
-            this.toggleActionsItem.textContent = label;
-        }
-    }
-
-    renderFileTrees() {
-        this.initializeSelectedFiles();
-        this.fileTreeDiv.empty();
-
-        this.plugin.log("=== Filetrees:===");
-        this.plugin.log(JSON.stringify(this.plugin.fileTrees, null, 2));
-
-        if (!this.plugin.fileTrees) {
-            this.fileTreeDiv.createEl("p", { text: "Loading...", cls: "smart-sync-loading" });
-            return;
-        }
-
-        const hasAnyChanges = ["remoteFiles", "localFiles"].some((location) => {
-            const locationData = this.plugin.fileTrees[location as keyof FileTrees];
-            return Object.values(locationData).some((section) => Object.keys(section).length > 0);
-        });
-
-        if (!hasAnyChanges) {
-            this.fileTreeDiv.createDiv({
-                cls: "smart-sync-empty",
-                text: "✓ No changes to sync",
-            });
-            this.plugin.sessionSynced = true;
-            return;
-        }
-
-        // Render Local and Remote sections
-        const locations: { key: keyof FileTrees; title: string; icon: string }[] = [
-            { key: "localFiles", title: "Local", icon: "💻" },
-            { key: "remoteFiles", title: "Remote", icon: "☁️" },
-        ];
-
-        const types: Array<{ key: keyof FileTree; title: string; icon: string; color: string }> = [
-            { key: "added", title: "Added", icon: "➕", color: "green" },
-            { key: "modified", title: "Modified", icon: "✏️", color: "orange" },
-            { key: "deleted", title: "Deleted", icon: "🗑️", color: "red" },
-        ];
-
-        locations.forEach(({ key, title, icon }) => {
-            const locationData = this.plugin.fileTrees[key];
-            const hasChanges = Object.values(locationData).some((section) => Object.keys(section).length > 0);
-
-            if (!hasChanges) return;
-
-            const locationEl = this.fileTreeDiv.createDiv({ cls: "smart-sync-location" });
-            locationEl.createDiv({ cls: "smart-sync-location-title", text: `${icon} ${title}` });
-
-            types.forEach(({ key: typeKey, title: typeTitle, icon: typeIcon, color }) => {
-                const files = locationData[typeKey];
-                if (Object.keys(files).length === 0) return;
-
-                const sectionEl = locationEl.createDiv({ cls: "smart-sync-section" });
-                sectionEl.createDiv({
-                    cls: ["smart-sync-section-title", `smart-sync-section-${color}`],
-                    text: `${typeIcon} ${typeTitle} (${Object.keys(files).length})`,
-                });
-
-                const filesContainer = sectionEl.createDiv({ cls: "smart-sync-files-list" });
-
-                Object.keys(files).forEach((path) => {
-                    this.renderFileRow(filesContainer, path, key, typeKey);
-                });
-            });
-        });
-
-        // ============= CONFLICTS SECTION =============
-        const conflictFiles = this.plugin.fileTrees.localFiles.except;
-        const hasConflicts = Object.keys(conflictFiles).length > 0;
-
-        if (hasConflicts) {
-            const conflictLocationEl = this.fileTreeDiv.createDiv({ cls: "smart-sync-location" });
-            conflictLocationEl.createDiv({ cls: "smart-sync-location-title", text: "⚔️ Conflicts" });
-
-            const conflictSectionEl = conflictLocationEl.createDiv({ cls: "smart-sync-section" });
-            conflictSectionEl.createDiv({
-                cls: ["smart-sync-section-title", "smart-sync-section-purple"],
-                text: `⚠️ Both sides changed (${Object.keys(conflictFiles).length})`,
-            });
-
-            const conflictFilesContainer = conflictSectionEl.createDiv({ cls: "smart-sync-files-list" });
-
-            Object.keys(conflictFiles).forEach((path) => {
-                // Render as conflict with both locations affected
-                this.renderConflictRow(conflictFilesContainer, path);
-            });
-        }
-
-        // Restore scroll position
-        this.fileTreeDiv.scrollTop = this.plugin.lastScrollPosition;
-    }
-
-    private renderFileRow(container: HTMLElement, path: string, _location: Location, _type: DiffType) {
-        const isSelected = this.plugin.fileSelection[path]?.selected === true;
-        const row = container.createDiv({
-            cls: ["smart-sync-file-row", isSelected ? "selected" : ""],
-            attr: { "data-path": path },
-        });
-
-        // Checkbox
-        const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
-        checkbox.innerHTML = isSelected ? "☑️" : "☐";
-        checkbox.addEventListener("click", (e) => {
-            e.stopPropagation();
-            this.toggleFileSelection(path);
-            const nowSelected = this.plugin.fileSelection[path]?.selected === true;
-            checkbox.innerHTML = nowSelected ? "☑️" : "☐";
-            row.toggleClass("selected", nowSelected);
-        });
-
-        // File path (clickable parts)
-        const pathContainer = row.createDiv({ cls: "smart-sync-path-container" });
-
-        // Icon
-        if (!this.plugin.mobile) pathContainer.createSpan({ cls: "smart-sync-file-icon", text: this.getFileIcon(path) });
-
-        // Split path into directory and filename
-        const lastSlash = path.lastIndexOf("/");
-        if (lastSlash > 0) {
-            const dirPart = path.substring(0, lastSlash + 1);
-            const filePart = path.substring(lastSlash + 1);
-
-            const dirEl = pathContainer.createSpan({ cls: "smart-sync-path-dir", text: dirPart });
-            dirEl.addEventListener("click", () => this.openInExplorer(path));
-
-            const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: filePart });
-            fileEl.addEventListener("click", () => this.openFile(path));
-        } else {
-            const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: path });
-            fileEl.addEventListener("click", () => this.openFile(path));
-        }
-
-        // Explicit action dropdown (now to the right of path)
-        const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
-        actionSelect.addClass("hidden");
-        const blankOption = actionSelect.createEl("option", { value: "", text: "" });
-        actionSelect.createEl("option", { value: "push", text: "⬆️ Push" });
-        actionSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
-
-        const currentAction = this.plugin.fileSelection[path]?.explicitAction;
-        if (currentAction) {
-            actionSelect.value = currentAction;
-        } else {
-            blankOption.selected = true;
-        }
-
-        actionSelect.addEventListener("change", (e) => {
-            const action = (e.target as HTMLSelectElement).value as ExplicitAction;
-            if (this.plugin.fileSelection[path]) {
-                if (action) {
-                    this.plugin.fileSelection[path].explicitAction = action;
-                } else {
-                    delete this.plugin.fileSelection[path].explicitAction;
-                }
-            }
-        });
-
-        actionSelect.addEventListener("click", (e) => e.stopPropagation());
-
-        // Action menu button (three dots)
-        const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
-        menuBtn.addEventListener("click", (e) => e.stopPropagation());
-
-        this.createContextMenu(menuBtn, path);
-    }
-
-    private renderConflictRow(container: HTMLElement, path: string) {
-        const isSelected = this.plugin.fileSelection[path]?.selected === true;
-        const row = container.createDiv({
-            cls: ["smart-sync-file-row", "smart-sync-conflict-row", isSelected ? "selected" : ""],
-            attr: { "data-path": path },
-        });
-
-        // Checkbox
-        const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
-        checkbox.innerHTML = isSelected ? "☑️" : "☐";
-        checkbox.addEventListener("click", (e) => {
-            e.stopPropagation();
-            this.toggleFileSelection(path);
-            const nowSelected = this.plugin.fileSelection[path]?.selected === true;
-            checkbox.innerHTML = nowSelected ? "☑️" : "☐";
-            row.toggleClass("selected", nowSelected);
-        });
-
-        // Conflict icon + File path
-        const pathContainer = row.createDiv({ cls: "smart-sync-path-container" });
-
-        if (!this.plugin.mobile) pathContainer.createSpan({ cls: "smart-sync-file-icon", text: this.getFileIcon(path) });
-
-        // Split path into directory and filename
-        const lastSlash = path.lastIndexOf("/");
-        if (lastSlash > 0) {
-            const dirPart = path.substring(0, lastSlash + 1);
-            const filePart = path.substring(lastSlash + 1);
-
-            const dirEl = pathContainer.createSpan({ cls: "smart-sync-path-dir", text: dirPart });
-            dirEl.addEventListener("click", () => this.openInExplorer(path));
-
-            const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: filePart });
-            fileEl.addEventListener("click", () => this.openFile(path));
-        } else {
-            const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: path });
-            fileEl.addEventListener("click", () => this.openFile(path));
-        }
-
-        // Conflict resolution dropdown
-        const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
-        // actionSelect.addClass("hidden");
-        const blankOption = actionSelect.createEl("option", { value: "", text: "Choose action…" });
-        actionSelect.createEl("option", { value: "push", text: "⬆️ Keep Local" });
-        actionSelect.createEl("option", { value: "pull", text: "⬇️ Keep Remote" });
-
-        const currentAction = this.plugin.fileSelection[path]?.explicitAction;
-        if (currentAction) {
-            actionSelect.value = currentAction;
-        } else {
-            blankOption.selected = true;
-        }
-
-        actionSelect.addEventListener("change", (e) => {
-            const action = (e.target as HTMLSelectElement).value as ExplicitAction;
-            if (this.plugin.fileSelection[path]) {
-                if (action) {
-                    this.plugin.fileSelection[path].explicitAction = action;
-                } else {
-                    delete this.plugin.fileSelection[path].explicitAction;
-                }
-            }
-        });
-
-        actionSelect.addEventListener("click", (e) => e.stopPropagation());
-
-        // Action menu button (three dots)
-        const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
-        menuBtn.addEventListener("click", (e) => e.stopPropagation());
-
-        this.createContextMenu(menuBtn, path);
-    }
-
-    private createContextMenu(button: HTMLElement, path: string): void {
-        const menu = document.createElement("div");
-        menu.addClass("smart-sync-context-menu");
-        this.dropdownContainer.appendChild(menu);
-
-        const items = [
-            { label: "📂 Open in Explorer", action: () => this.openInExplorer(path) },
-
-            { label: "🔍 Show Diff", action: () => this.showDiff(path, this.plugin.fileSelection[path]?.location) },
-        ];
-        if (!path.startsWith(this.app.vault.configDir)) {
-            items.unshift({ label: "📝 Open in Obsidian", action: () => this.openFile(path) });
-        }
-
-        items.forEach((item) => {
-            const itemEl = menu.createEl("button", {
-                text: item.label,
-                cls: "smart-sync-context-item",
-            });
-            itemEl.addEventListener("click", (e) => {
-                e.stopPropagation();
-                this.closeAllDropdowns();
-                item.action();
-            });
-        });
-
-        button.addEventListener("click", (e) => {
-            e.stopPropagation();
-            this.closeAllDropdowns();
-            const rect = button.getBoundingClientRect();
-            menu.style.top = rect.bottom + 4 + "px";
-            menu.style.right = window.innerWidth - rect.right + "px";
-            menu.addClass("open");
-        });
-    }
-
-    private getFileIcon(path: string): string {
-        // if (this.plugin.mobile) return "";
-        if (path.endsWith("/")) return "📁";
-        const ext = path.split(".").pop()?.toLowerCase();
-        switch (ext) {
-            case "md":
-                return "📝";
-            case "txt":
-                return "📄";
-            case "pdf":
-                return "📕";
-            case "png":
-            case "jpg":
-            case "jpeg":
-            case "gif":
-            case "svg":
-                return "🖼️";
-            case "mp3":
-            case "wav":
-            case "ogg":
-                return "🎵";
-            case "mp4":
-            case "avi":
-            case "mov":
-                return "🎬";
-            case "zip":
-            case "rar":
-            case "7z":
-                return "📦";
-            case "js":
-            case "ts":
-            case "jsx":
-            case "tsx":
-                return "🟨";
-            case "py":
-                return "🐍";
-            case "java":
-                return "☕";
-            case "cpp":
-            case "c":
-            case "h":
-                return "🔧";
-            default:
-                return "📄";
-        }
-    }
-
-    private openInExplorer(path: string) {
-        // Get the resource path which is in app://vault-id/path format
-        // const tFile = this.app.vault.getAbstractFileByPath(path);
-
-        try {
-            //@ts-ignore No longer in Obsidian API included
-            // var resourcePath = this.app.vault.adapter.getFullPath(tFile.path);
-            //@ts-ignore No longer in Obsidian API included
-            const basePath = this.app.vault.adapter.getBasePath().replaceAll("\\", "/");
-
-            console.log(basePath);
-            // console.log(resourcePath);
-
-            // const systemPath = decodeURIComponent(urlMatch[1]);
-            // var resourcePath = resourcePath.replaceAll("\\", "/");
-            const directoryPath = dirname(path);
-            console.log(directoryPath);
-
-            const systemPath = encodeURI(`${basePath}/${directoryPath}`);
-            console.log("enocded ", systemPath);
-            // Open with file:/// protocol for system file explorer
-            window.open(`file:///${systemPath}`, "_blank");
-        } catch (error) {
-            console.error("error, ", error);
-        }
-    }
-
-    private async openFile(path: string) {
-        if (path.endsWith("/")) return;
-        if (path.startsWith(this.app.vault.configDir)) return;
-        if (!(await this.app.vault.adapter.exists(path))) return;
-        this.app.workspace.openLinkText(path, "", "tab");
-    }
-
-    private showDiff(path: string, location: Location) {
-        new DiffModal(this.app, this.plugin, path, location).open();
-    }
-
-    onClose() {
-        this.dropdownContainer?.remove();
-        const { contentEl } = this;
-        contentEl.empty();
-    }
+	fileTreeDiv: HTMLDivElement;
+	dropdownContainer: HTMLDivElement;
+	statusIndicator: HTMLSpanElement;
+	actionsVisible = false;
+	private toggleActionsItem?: HTMLButtonElement;
+
+	constructor(
+		app: App,
+		public plugin: SmartSyncPlugin
+	) {
+		super(app);
+	}
+
+	onOpen() {
+		const { titleEl, modalEl, contentEl } = this;
+
+		modalEl.addClass("smart-sync-modal");
+		titleEl.setText("SmartSync");
+
+		// Container for floating dropdowns (context menus)
+		this.dropdownContainer = contentEl.createDiv({ cls: "smart-sync-dropdowns-container" });
+
+		const container = contentEl.createDiv({ cls: "smart-sync-container" });
+
+		// ============= HEADER =============
+		const header = container.createDiv({ cls: "smart-sync-header" });
+
+		const selectToggleBtn = header.createEl("button", {
+			text: "☑️ Select All",
+			cls: "smart-sync-header-btn",
+		});
+		selectToggleBtn.addEventListener("click", () => this.toggleSelectAll(selectToggleBtn));
+
+		// Status indicator in the center
+		this.statusIndicator = header.createSpan({
+			cls: "smart-sync-status-indicator",
+		});
+		this.updateStatusIndicator();
+
+		const reloadBtn = header.createEl("button", {
+			text: "🔄 Reload",
+			cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
+		});
+		reloadBtn.addEventListener("click", async () => {
+			await this.plugin.operations.check();
+			this.updateSyncButton();
+		});
+
+		// ============= FILES AREA =============
+		this.fileTreeDiv = container.createDiv({ cls: "smart-sync-files-area" });
+
+		// Save scroll position
+		this.fileTreeDiv.addEventListener("scroll", (e) => {
+			this.plugin.lastScrollPosition = (e.target as HTMLElement).scrollTop;
+		});
+
+		// ============= FOOTER =============
+		const footer = container.createDiv({ cls: "smart-sync-footer" });
+
+		// Left side - empty for balance
+		footer.createDiv({ cls: "smart-sync-footer-spacer" });
+
+		// Center - Sync Button
+		this.syncButton = footer.createEl("button", {
+			text: `🔄 Sync (0)`,
+			cls: ["smart-sync-footer-btn", "smart-sync-primary-btn"],
+		});
+		this.syncButton.addEventListener("click", () => this.syncSelected());
+
+		// Right side - Action buttons
+		const rightActions = footer.createDiv({ cls: "smart-sync-footer-right" });
+
+		// Special Actions Dropdown
+		const specialActionsBtn = rightActions.createEl("button", {
+			text: "⚡ Actions",
+			cls: "smart-sync-footer-btn",
+		});
+		this.createDropdown(specialActionsBtn, [
+			{
+				label: "Show Individual File Actions",
+				action: () => this.toggleActionSelects(),
+				updateLabel: (itemEl) => (this.toggleActionsItem = itemEl),
+			},
+			{
+				label: "📋 Replicate Local → Remote",
+				action: () =>
+					this.confirmAndRun("Replicate local on remote", () => this.plugin.operations.duplicateLocal()),
+			},
+			{
+				label: "🌐 Replicate Remote → Local",
+				action: () =>
+					this.confirmAndRun("Replicate remote on local", () => this.plugin.operations.duplicateRemote()),
+			},
+			{
+				label: "⬆️ Push Selected",
+				action: () => this.confirmAndRun("Push selected files", () => this.pushSelected()),
+			},
+			{
+				label: "⬇️ Pull Selected",
+				action: () => this.confirmAndRun("Pull selected files", () => this.pullSelected()),
+			},
+		]);
+
+		// // Toggle explicit action selects
+		// const toggleActionsBtn = header.createEl("button", {
+		//     text: "⚙️Show Actions",
+		//     cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
+		// });
+		// toggleActionsBtn.addEventListener("click", () => this.toggleActionSelects(toggleActionsBtn));
+
+		// Maintenance Dropdown
+		const maintenanceBtn = rightActions.createEl("button", {
+			text: "🔧",
+			cls: "smart-sync-footer-btn",
+			title: "Maintenance",
+		});
+		this.createDropdown(maintenanceBtn, [
+			{ label: "🔌 Test Connection", action: () => this.plugin.operations.test(true, true) },
+			{ label: "❌ Clear Error States", action: () => this.clearErrors() },
+			{ label: "💾 Save Vault State", action: () => this.plugin.saveState() },
+			{ label: "⚙️ SmartSync Settings", action: () => this.openSettings() },
+			{ label: "⏸️ Pause Sync", action: () => this.togglePause() },
+		]);
+
+		// Close dropdowns when clicking outside
+		document.addEventListener("click", (e) => {
+			if (!(e.target as HTMLElement).closest(".smart-sync-dropdown, .smart-sync-menu-btn")) {
+				this.closeAllDropdowns();
+			}
+		});
+
+		// Load and render files
+		if (!this.plugin.fileTrees) {
+			this.plugin.operations.check().then(() => this.updateSyncButton());
+		} else {
+			this.renderFileTrees();
+			this.updateSyncButton();
+		}
+	}
+
+	private syncButton: HTMLButtonElement;
+
+	private toggleSelectAll(btn: HTMLButtonElement) {
+		const allPaths = this.getAllFilePaths();
+		const allSelected =
+			allPaths.length > 0 && allPaths.every((path) => this.plugin.fileSelection[path]?.selected === true);
+
+		if (allSelected) {
+			// Deselect all
+			for (const path of allPaths) {
+				if (this.plugin.fileSelection[path]) {
+					this.plugin.fileSelection[path].selected = false;
+				}
+			}
+			btn.textContent = "☑️ Select All";
+		} else {
+			// Select all
+			for (const path of allPaths) {
+				if (this.plugin.fileSelection[path]) {
+					this.plugin.fileSelection[path].selected = true;
+				}
+			}
+			btn.textContent = "☐ Select None";
+		}
+		this.renderFileTrees();
+		this.updateSyncButton();
+	}
+
+	private toggleFileSelection(path: string) {
+		if (this.plugin.fileSelection[path]) {
+			this.plugin.fileSelection[path].selected = !this.plugin.fileSelection[path].selected;
+		}
+		this.updateSyncButton();
+	}
+
+	private updateSyncButton() {
+		const count = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
+		this.syncButton.textContent = `🔄 Sync (${count})`;
+	}
+
+	private initializeSelectedFiles() {
+		if (!this.plugin.fileTrees) return;
+
+		// First, collect all current paths from fileTrees
+		const currentPaths = new Set<string>();
+		const locations: (keyof FileTrees)[] = ["local", "remote"];
+		const types: (keyof FileTree)[] = ["added", "modified", "deleted", "except"];
+
+		for (const locationKey of locations) {
+			for (const typeKey of types) {
+				const files = this.plugin.fileTrees[locationKey][typeKey];
+				for (const [path] of Object.entries(files)) {
+					currentPaths.add(path);
+					// Only add if not already present (preserve existing selections)
+					if (!this.plugin.fileSelection[path]) {
+						this.plugin.fileSelection[path] = {
+							location: locationKey,
+							diffType: typeKey,
+							selected: true, // Default to selected
+							explicitAction: undefined,
+						};
+					}
+				}
+			}
+		}
+
+		// Remove entries for files that are no longer in fileTrees
+		for (const path of Object.keys(this.plugin.fileSelection)) {
+			if (!currentPaths.has(path)) {
+				delete this.plugin.fileSelection[path];
+			}
+		}
+	}
+
+	updateStatusIndicator() {
+		const status = this.plugin.status;
+		const statusItem = STATUS_ITEMS[status];
+		this.statusIndicator.textContent = `${statusItem.emoji} ${statusItem.label}`;
+		this.statusIndicator.setCssProps({ color: statusItem.color });
+	}
+
+	private getAllFilePaths(): string[] {
+		const paths: string[] = [];
+		if (!this.plugin.fileTrees) return paths;
+
+		["remote", "local"].forEach((location) => {
+			const locationData = this.plugin.fileTrees[location as keyof FileTrees];
+			["added", "deleted", "modified"].forEach((type) => {
+				Object.keys(locationData[type as keyof FileTree]).forEach((path) => {
+					paths.push(path);
+				});
+			});
+		});
+		return paths;
+	}
+
+	private createDropdown(
+		button: HTMLButtonElement,
+		items: { label: string; action: () => void; updateLabel?: (itemEl: HTMLButtonElement) => void }[]
+	): void {
+		const dropdown = document.createElement("div");
+		dropdown.addClass("smart-sync-dropdown");
+		this.dropdownContainer.appendChild(dropdown);
+
+		const dropdownContent = dropdown.createDiv({ cls: "smart-sync-dropdown-content" });
+
+		items.forEach((item) => {
+			const itemEl = dropdownContent.createEl("button", {
+				text: item.label,
+				cls: "smart-sync-dropdown-item",
+			});
+			if (item.updateLabel) {
+				item.updateLabel(itemEl);
+			}
+			itemEl.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.closeAllDropdowns();
+				item.action();
+			});
+		});
+
+		button.addEventListener("click", (e) => {
+			e.stopPropagation();
+			const isOpen = dropdown.hasClass("open");
+			this.closeAllDropdowns();
+			if (!isOpen) {
+				const rect = button.getBoundingClientRect();
+				// Position above the button
+				dropdown.style.bottom = window.innerHeight - rect.top + 8 + "px";
+				dropdown.style.left = rect.left + rect.width / 2 - 90 + "px";
+				dropdown.addClass("open");
+			}
+		});
+	}
+
+	private closeAllDropdowns() {
+		this.dropdownContainer.querySelectorAll(".smart-sync-dropdown.open").forEach((el) => {
+			el.removeClass("open");
+			(el as HTMLElement).style.bottom = "";
+			(el as HTMLElement).style.left = "";
+		});
+		this.dropdownContainer.querySelectorAll(".smart-sync-context-menu.open").forEach((el) => {
+			el.removeClass("open");
+			(el as HTMLElement).style.top = "";
+			(el as HTMLElement).style.right = "";
+		});
+	}
+
+	private confirmAndRun(actionName: string, action: () => void) {
+		const confirm = new Modal(this.app);
+		confirm.contentEl.createEl("p", {
+			text: `Are you sure you want to ${actionName.toLowerCase()}?`,
+			cls: "smart-sync-confirm-text",
+		});
+
+		const btnContainer = confirm.contentEl.createDiv({ cls: "smart-sync-confirm-buttons" });
+
+		const yesBtn = btnContainer.createEl("button", {
+			text: "Yes",
+			cls: ["mod-cta", "smart-sync-confirm-btn"],
+		});
+		yesBtn.addEventListener("click", () => {
+			action();
+			confirm.close();
+		});
+
+		const noBtn = btnContainer.createEl("button", {
+			text: "No",
+			cls: "smart-sync-confirm-btn",
+		});
+		noBtn.addEventListener("click", () => confirm.close());
+
+		confirm.open();
+	}
+
+	private async syncSelected() {
+		const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
+		if (selectedCount === 0) {
+			new Notice("No files selected");
+			return;
+		}
+		this.plugin.operations.fullSync();
+	}
+
+	private async pushSelected() {
+		const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
+		new Notice(`Pushing ${selectedCount} files`);
+		this.plugin.operations.push();
+	}
+
+	private async pullSelected() {
+		const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
+		new Notice(`Pulling ${selectedCount} files`);
+		this.plugin.operations.pull();
+	}
+
+	private clearErrors() {
+		this.plugin.prevData.error = false;
+		this.plugin.setStatus(Status.NONE);
+		new Notice("Error states cleared");
+	}
+
+	private openSettings() {
+		this.plugin.settingPrivate.openTabById(PLUGIN_ID);
+		this.plugin.settingPrivate.open();
+	}
+
+	private togglePause() {
+		this.plugin.togglePause();
+	}
+
+	private toggleActionSelects(btn?: HTMLButtonElement) {
+		this.actionsVisible = !this.actionsVisible;
+		this.fileTreeDiv.querySelectorAll(".smart-sync-action-select").forEach((el) => {
+			el.toggleClass("hidden", !this.actionsVisible);
+		});
+		const label = this.actionsVisible ? "Hide Individual Actions" : "Show Individual Actions";
+		if (btn) {
+			btn.textContent = this.actionsVisible ? "⚙️ Hide Actions" : "⚙️Show Actions";
+		}
+		if (this.toggleActionsItem) {
+			this.toggleActionsItem.textContent = label;
+		}
+	}
+
+	renderFileTrees() {
+		this.initializeSelectedFiles();
+		this.fileTreeDiv.empty();
+
+		this.plugin.log("=== Filetrees:===");
+		this.plugin.log(JSON.stringify(this.plugin.fileTrees, null, 2));
+
+		if (!this.plugin.fileTrees) {
+			this.fileTreeDiv.createEl("p", { text: "Loading...", cls: "smart-sync-loading" });
+			return;
+		}
+
+		const hasAnyChanges = ["remote", "local"].some((location) => {
+			const locationData = this.plugin.fileTrees[location as keyof FileTrees];
+			return Object.values(locationData).some((section) => Object.keys(section).length > 0);
+		});
+
+		if (!hasAnyChanges) {
+			this.fileTreeDiv.createDiv({
+				cls: "smart-sync-empty",
+				text: "✓ No changes to sync",
+			});
+			this.plugin.sessionSynced = true;
+			return;
+		}
+
+		// Render Local and Remote sections
+		const locations: { key: keyof FileTrees; title: string; icon: string }[] = [
+			{ key: "local", title: "Local", icon: "💻" },
+			{ key: "remote", title: "Remote", icon: "☁️" },
+		];
+
+		const types: Array<{ key: keyof FileTree; title: string; icon: string; color: string }> = [
+			{ key: "added", title: "Added", icon: "➕", color: "green" },
+			{ key: "modified", title: "Modified", icon: "✏️", color: "orange" },
+			{ key: "deleted", title: "Deleted", icon: "🗑️", color: "red" },
+		];
+
+		locations.forEach(({ key, title, icon }) => {
+			const locationData = this.plugin.fileTrees[key];
+			const hasChanges = Object.values(locationData).some((section) => Object.keys(section).length > 0);
+
+			if (!hasChanges) return;
+
+			const locationEl = this.fileTreeDiv.createDiv({ cls: "smart-sync-location" });
+			locationEl.createDiv({ cls: "smart-sync-location-title", text: `${icon} ${title}` });
+
+			types.forEach(({ key: typeKey, title: typeTitle, icon: typeIcon, color }) => {
+				const files = locationData[typeKey];
+				if (Object.keys(files).length === 0) return;
+
+				const sectionEl = locationEl.createDiv({ cls: "smart-sync-section" });
+				sectionEl.createDiv({
+					cls: ["smart-sync-section-title", `smart-sync-section-${color}`],
+					text: `${typeIcon} ${typeTitle} (${Object.keys(files).length})`,
+				});
+
+				const filesContainer = sectionEl.createDiv({ cls: "smart-sync-files-list" });
+
+				Object.keys(files).forEach((path) => {
+					this.renderFileRow(filesContainer, path, key, typeKey);
+				});
+			});
+		});
+
+		// ============= CONFLICTS SECTION =============
+		const conflictFiles = this.plugin.fileTrees.local.except;
+		const hasConflicts = Object.keys(conflictFiles).length > 0;
+
+		if (hasConflicts) {
+			const conflictLocationEl = this.fileTreeDiv.createDiv({ cls: "smart-sync-location" });
+			conflictLocationEl.createDiv({ cls: "smart-sync-location-title", text: "⚔️ Conflicts" });
+
+			const conflictSectionEl = conflictLocationEl.createDiv({ cls: "smart-sync-section" });
+			conflictSectionEl.createDiv({
+				cls: ["smart-sync-section-title", "smart-sync-section-purple"],
+				text: `⚠️ Both sides changed (${Object.keys(conflictFiles).length})`,
+			});
+
+			const conflictFilesContainer = conflictSectionEl.createDiv({ cls: "smart-sync-files-list" });
+
+			Object.keys(conflictFiles).forEach((path) => {
+				// Render as conflict with both locations affected
+				this.renderConflictRow(conflictFilesContainer, path);
+			});
+		}
+
+		// Restore scroll position
+		this.fileTreeDiv.scrollTop = this.plugin.lastScrollPosition;
+	}
+
+	private renderFileRow(container: HTMLElement, path: string, _location: Location, _type: DiffType) {
+		const isSelected = this.plugin.fileSelection[path]?.selected === true;
+		const row = container.createDiv({
+			cls: ["smart-sync-file-row", isSelected ? "selected" : ""],
+			attr: { "data-path": path },
+		});
+
+		// Checkbox
+		const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
+		checkbox.innerHTML = isSelected ? "☑️" : "☐";
+		checkbox.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.toggleFileSelection(path);
+			const nowSelected = this.plugin.fileSelection[path]?.selected === true;
+			checkbox.innerHTML = nowSelected ? "☑️" : "☐";
+			row.toggleClass("selected", nowSelected);
+		});
+
+		// File path (clickable parts)
+		const pathContainer = row.createDiv({ cls: "smart-sync-path-container" });
+
+		// Icon
+		if (!this.plugin.mobile)
+			pathContainer.createSpan({ cls: "smart-sync-file-icon", text: this.getFileIcon(path) });
+
+		// Split path into directory and filename
+		const lastSlash = path.lastIndexOf("/");
+		if (lastSlash > 0) {
+			const dirPart = path.substring(0, lastSlash + 1);
+			const filePart = path.substring(lastSlash + 1);
+
+			const dirEl = pathContainer.createSpan({ cls: "smart-sync-path-dir", text: dirPart });
+			dirEl.addEventListener("click", () => this.openInExplorer(path));
+
+			const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: filePart });
+			fileEl.addEventListener("click", () => this.openFile(path));
+		} else {
+			const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: path });
+			fileEl.addEventListener("click", () => this.openFile(path));
+		}
+
+		// Explicit action dropdown (now to the right of path)
+		const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
+		actionSelect.addClass("hidden");
+		const blankOption = actionSelect.createEl("option", { value: "", text: "" });
+		actionSelect.createEl("option", { value: "push", text: "⬆️ Push" });
+		actionSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
+
+		const currentAction = this.plugin.fileSelection[path]?.explicitAction;
+		if (currentAction) {
+			actionSelect.value = currentAction;
+		} else {
+			blankOption.selected = true;
+		}
+
+		actionSelect.addEventListener("change", (e) => {
+			const action = (e.target as HTMLSelectElement).value as ExplicitAction;
+			if (this.plugin.fileSelection[path]) {
+				if (action) {
+					this.plugin.fileSelection[path].explicitAction = action;
+				} else {
+					delete this.plugin.fileSelection[path].explicitAction;
+				}
+			}
+		});
+
+		actionSelect.addEventListener("click", (e) => e.stopPropagation());
+
+		// Action menu button (three dots)
+		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
+		menuBtn.addEventListener("click", (e) => e.stopPropagation());
+
+		this.createContextMenu(menuBtn, path);
+	}
+
+	private renderConflictRow(container: HTMLElement, path: string) {
+		const isSelected = this.plugin.fileSelection[path]?.selected === true;
+		const row = container.createDiv({
+			cls: ["smart-sync-file-row", "smart-sync-conflict-row", isSelected ? "selected" : ""],
+			attr: { "data-path": path },
+		});
+
+		// Checkbox
+		const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
+		checkbox.innerHTML = isSelected ? "☑️" : "☐";
+		checkbox.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.toggleFileSelection(path);
+			const nowSelected = this.plugin.fileSelection[path]?.selected === true;
+			checkbox.innerHTML = nowSelected ? "☑️" : "☐";
+			row.toggleClass("selected", nowSelected);
+		});
+
+		// Conflict icon + File path
+		const pathContainer = row.createDiv({ cls: "smart-sync-path-container" });
+
+		if (!this.plugin.mobile)
+			pathContainer.createSpan({ cls: "smart-sync-file-icon", text: this.getFileIcon(path) });
+
+		// Split path into directory and filename
+		const lastSlash = path.lastIndexOf("/");
+		if (lastSlash > 0) {
+			const dirPart = path.substring(0, lastSlash + 1);
+			const filePart = path.substring(lastSlash + 1);
+
+			const dirEl = pathContainer.createSpan({ cls: "smart-sync-path-dir", text: dirPart });
+			dirEl.addEventListener("click", () => this.openInExplorer(path));
+
+			const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: filePart });
+			fileEl.addEventListener("click", () => this.openFile(path));
+		} else {
+			const fileEl = pathContainer.createSpan({ cls: "smart-sync-path-file", text: path });
+			fileEl.addEventListener("click", () => this.openFile(path));
+		}
+
+		// Conflict resolution dropdown
+		const actionSelect = row.createEl("select", { cls: "smart-sync-action-select" });
+		// actionSelect.addClass("hidden");
+		const blankOption = actionSelect.createEl("option", { value: "", text: "Choose action…" });
+		actionSelect.createEl("option", { value: "push", text: "⬆️ Keep Local" });
+		actionSelect.createEl("option", { value: "pull", text: "⬇️ Keep Remote" });
+
+		const currentAction = this.plugin.fileSelection[path]?.explicitAction;
+		if (currentAction) {
+			actionSelect.value = currentAction;
+		} else {
+			blankOption.selected = true;
+		}
+
+		actionSelect.addEventListener("change", (e) => {
+			const action = (e.target as HTMLSelectElement).value as ExplicitAction;
+			if (this.plugin.fileSelection[path]) {
+				if (action) {
+					this.plugin.fileSelection[path].explicitAction = action;
+				} else {
+					delete this.plugin.fileSelection[path].explicitAction;
+				}
+			}
+		});
+
+		actionSelect.addEventListener("click", (e) => e.stopPropagation());
+
+		// Action menu button (three dots)
+		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
+		menuBtn.addEventListener("click", (e) => e.stopPropagation());
+
+		this.createContextMenu(menuBtn, path);
+	}
+
+	private createContextMenu(button: HTMLElement, path: string): void {
+		const menu = document.createElement("div");
+		menu.addClass("smart-sync-context-menu");
+		this.dropdownContainer.appendChild(menu);
+
+		const items = [
+			{ label: "📂 Open in Explorer", action: () => this.openInExplorer(path) },
+
+			{ label: "🔍 Show Diff", action: () => this.showDiff(path, this.plugin.fileSelection[path]?.location) },
+		];
+		if (!path.startsWith(this.app.vault.configDir)) {
+			items.unshift({ label: "📝 Open in Obsidian", action: () => this.openFile(path) });
+		}
+
+		items.forEach((item) => {
+			const itemEl = menu.createEl("button", {
+				text: item.label,
+				cls: "smart-sync-context-item",
+			});
+			itemEl.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.closeAllDropdowns();
+				item.action();
+			});
+		});
+
+		button.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.closeAllDropdowns();
+			const rect = button.getBoundingClientRect();
+			menu.style.top = rect.bottom + 4 + "px";
+			menu.style.right = window.innerWidth - rect.right + "px";
+			menu.addClass("open");
+		});
+	}
+
+	private getFileIcon(path: string): string {
+		// if (this.plugin.mobile) return "";
+		if (path.endsWith("/")) return "📁";
+		const ext = path.split(".").pop()?.toLowerCase();
+		switch (ext) {
+			case "md":
+				return "📝";
+			case "txt":
+				return "📄";
+			case "pdf":
+				return "📕";
+			case "png":
+			case "jpg":
+			case "jpeg":
+			case "gif":
+			case "svg":
+				return "🖼️";
+			case "mp3":
+			case "wav":
+			case "ogg":
+				return "🎵";
+			case "mp4":
+			case "avi":
+			case "mov":
+				return "🎬";
+			case "zip":
+			case "rar":
+			case "7z":
+				return "📦";
+			case "js":
+			case "ts":
+			case "jsx":
+			case "tsx":
+				return "🟨";
+			case "py":
+				return "🐍";
+			case "java":
+				return "☕";
+			case "cpp":
+			case "c":
+			case "h":
+				return "🔧";
+			default:
+				return "📄";
+		}
+	}
+
+	private openInExplorer(path: string) {
+		// Get the resource path which is in app://vault-id/path format
+		// const tFile = this.app.vault.getAbstractFileByPath(path);
+
+		try {
+			//@ts-ignore No longer in Obsidian API included
+			// var resourcePath = this.app.vault.adapter.getFullPath(tFile.path);
+			//@ts-ignore No longer in Obsidian API included
+			const basePath = this.app.vault.adapter.getBasePath().replaceAll("\\", "/");
+
+			console.log(basePath);
+			// console.log(resourcePath);
+
+			// const systemPath = decodeURIComponent(urlMatch[1]);
+			// var resourcePath = resourcePath.replaceAll("\\", "/");
+			const directoryPath = dirname(path);
+			console.log(directoryPath);
+
+			const systemPath = encodeURI(`${basePath}/${directoryPath}`);
+			console.log("enocded ", systemPath);
+			// Open with file:/// protocol for system file explorer
+			window.open(`file:///${systemPath}`, "_blank");
+		} catch (error) {
+			console.error("error, ", error);
+		}
+	}
+
+	private async openFile(path: string) {
+		if (path.endsWith("/")) return;
+		if (path.startsWith(this.app.vault.configDir)) return;
+		if (!(await this.app.vault.adapter.exists(path))) return;
+		this.app.workspace.openLinkText(path, "", "tab");
+	}
+
+	private showDiff(path: string, location: Location) {
+		new DiffModal(this.app, this.plugin, path, location).open();
+	}
+
+	onClose() {
+		this.dropdownContainer?.remove();
+		const { contentEl } = this;
+		contentEl.empty();
+	}
 }
