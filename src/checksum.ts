@@ -1,6 +1,6 @@
 import { SmartSyncClient, ChecksumsResponse } from "./smartSync";
 import SmartSyncPlugin from "./main";
-import { sha256 } from "./util";
+import { msToSeconds, sha256 } from "./util";
 import { TAbstractFile, TFile, normalizePath } from "obsidian";
 import { FileList, Hash } from "./const";
 import ignoreFactory from "ignore";
@@ -193,9 +193,16 @@ export class Checksum {
 						} else {
 							// Calculate new hash
 							const filePath = element.path;
+							const start = Date.now();
 
 							// Try fileCache first (for .md files)
-							if (this.plugin.hashFlags.cache && fileCache && filePath.endsWith(".md")) {
+							// Only use metadatacache if mtime is older than 10s
+							if (
+								this.plugin.hashFlags.cache &&
+								fileCache &&
+								filePath.endsWith(".md") &&
+								currentMtime + 15 <= msToSeconds(start)
+							) {
 								try {
 									const cacheHash = fileCache[filePath].hash;
 									if (cacheHash) {
@@ -209,7 +216,6 @@ export class Checksum {
 
 							// Calculate hash if not yet assigned
 							if (!hash) {
-								const start = Date.now();
 								try {
 									const content = await this.plugin.app.vault.readBinary(element);
 									hash = await sha256(content);

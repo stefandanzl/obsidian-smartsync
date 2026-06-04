@@ -519,7 +519,7 @@ export class Operations {
 					}
 				} else if (selection.diffType === "modified") {
 					if (selection.inverse) {
-						filesToDeleteLocal[filePath] = fileTrees.local.modified[filePath];
+						filesToDownload[filePath] = fileTrees.local.modified[filePath];
 					} else {
 						filesToUpload[filePath] = fileTrees.local.modified[filePath];
 					}
@@ -531,10 +531,9 @@ export class Operations {
 					}
 				} else if (selection.diffType === "except") {
 					if (selection.inverse) {
-						filesToDownload[filePath] = fileTrees.local.except[filePath];
-					} else {
-						filesToUpload[filePath] = fileTrees.local.except[filePath];
+						this.plugin.log("Except file should not have inverse set to true: " + filePath);
 					}
+					filesToUpload[filePath] = fileTrees.local.except[filePath];
 				}
 			} else if (selection.location === "remote") {
 				if (selection.diffType === "added") {
@@ -545,7 +544,7 @@ export class Operations {
 					}
 				} else if (selection.diffType === "modified") {
 					if (selection.inverse) {
-						filesToDeleteRemote[filePath] = fileTrees.remote.modified[filePath];
+						filesToUpload[filePath] = fileTrees.remote.modified[filePath];
 					} else {
 						filesToDownload[filePath] = fileTrees.remote.modified[filePath];
 					}
@@ -557,10 +556,9 @@ export class Operations {
 					}
 				} else if (selection.diffType === "except") {
 					if (selection.inverse) {
-						filesToUpload[filePath] = fileTrees.remote.except[filePath];
-					} else {
-						filesToDownload[filePath] = fileTrees.remote.except[filePath];
+						this.plugin.log("Except file should not have inverse set to true: " + filePath);
 					}
+					filesToDownload[filePath] = fileTrees.remote.except[filePath];
 				}
 			}
 		}

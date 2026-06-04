@@ -7,6 +7,8 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { keymap, lineNumbers, drawSelection } from "@codemirror/view";
 import SmartSyncPlugin from "./main";
 import { Location } from "./const";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { tags } from "@lezer/highlight";
 
 export class DiffModal extends Modal {
 	mergeView: MergeView | undefined;
@@ -120,6 +122,14 @@ export class DiffModal extends Modal {
 			history(),
 			search(),
 			EditorView.lineWrapping,
+			// oneDark,
+			EditorView.theme(
+				{
+					"&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
+						{ backgroundColor: "var(--background-modifier-active-hover" },
+				},
+				{ dark: true }
+			),
 		];
 
 		// Remote editor config (read-only)

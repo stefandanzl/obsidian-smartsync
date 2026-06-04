@@ -101,12 +101,6 @@
 	border-color: var(--interactive-hover);
 }
 
-.smart-sync-primary-btn {
-	background: var(--interactive-accent);
-	border-color: var(--interactive-accent);
-	color: var(--text-on-accent);
-}
-
 .smart-sync-primary-btn:hover {
 	background: var(--interactive-accent-hover);
 	border-color: var(--interactive-accent-hover);
@@ -226,22 +220,13 @@
 }
 
 /* Checkbox */
-.smart-sync-checkbox {
-	display: inline-flex;
-	align-items: center;
-	cursor: pointer;
-	user-select: none;
+.smart-sync-file-row input.task-list-item-checkbox {
+	margin: 0;
+	margin-inline-start: 0;
+	margin-inline-end: 0;
+	top: 0;
 	flex-shrink: 0;
-	color: var(--text-muted);
-}
-
-.smart-sync-checkbox:hover {
-	color: var(--text-accent);
-}
-
-.smart-sync-checkbox svg {
-	width: 20px;
-	height: 20px;
+	cursor: pointer;
 }
 
 /* Inverse Pill */

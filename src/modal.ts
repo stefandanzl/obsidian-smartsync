@@ -53,7 +53,7 @@ export class FileTreeModal extends Modal {
 		});
 
 		this.syncButton = headerTop.createEl("button", {
-			cls: ["smart-sync-header-btn", "smart-sync-primary-btn"],
+			cls: ["smart-sync-header-btn", "mod-cta"],
 			attr: { "aria-label": "Sync selected files" },
 		});
 		setIcon(this.syncButton, "refresh-cw");
@@ -627,7 +627,7 @@ export class FileTreeModal extends Modal {
 			case "local":
 				switch (diffType) {
 					case "added":
-						return "Delete"; //🗑️
+						return "Delete local file"; //🗑️
 					case "modified":
 						return "Replace with remote"; //🔄
 					case "deleted":
@@ -638,7 +638,7 @@ export class FileTreeModal extends Modal {
 			case "remote":
 				switch (diffType) {
 					case "added":
-						return "Delete"; //🗑️
+						return "Delete remote file"; //🗑️
 					case "modified":
 						return "Replace with local"; //🔄
 					case "deleted":
