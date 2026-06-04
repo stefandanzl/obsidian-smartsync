@@ -8,8 +8,6 @@ export class FileTreeModal extends Modal {
 	fileTreeDiv: HTMLDivElement;
 	dropdownContainer: HTMLDivElement;
 	statusIndicator: HTMLSpanElement;
-	actionsVisible = false;
-	private toggleActionsItem?: HTMLButtonElement;
 
 	constructor(
 		app: App,
@@ -83,11 +81,6 @@ export class FileTreeModal extends Modal {
 			cls: "smart-sync-footer-btn",
 		});
 		this.createDropdown(specialActionsBtn, [
-			{
-				label: "Show Individual File Actions",
-				action: () => this.toggleActionSelects(),
-				updateLabel: (itemEl) => (this.toggleActionsItem = itemEl),
-			},
 			{
 				label: "📋 Replicate Local → Remote",
 				action: () =>
@@ -356,17 +349,32 @@ export class FileTreeModal extends Modal {
 		this.plugin.togglePause();
 	}
 
-	private toggleActionSelects(btn?: HTMLButtonElement) {
-		this.actionsVisible = !this.actionsVisible;
-		this.fileTreeDiv.querySelectorAll(".smart-sync-action-select, .smart-sync-inverse-checkbox").forEach((el) => {
-			el.toggleClass("hidden", !this.actionsVisible);
-		});
-		const label = this.actionsVisible ? "Hide Individual Actions" : "Show Individual Actions";
-		if (btn) {
-			btn.textContent = this.actionsVisible ? "⚙️ Hide Actions" : "⚙️Show Actions";
-		}
-		if (this.toggleActionsItem) {
-			this.toggleActionsItem.textContent = label;
+	private getInversePillText(location: Location, diffType: DiffType): string {
+		switch (location) {
+			case "local":
+				switch (diffType) {
+					case "added":
+						return "🗑️ Delete";
+					case "modified":
+						return "🔄 Replace with remote";
+					case "deleted":
+						return "♻️ Recreate from remote";
+					default:
+						return "Inverse";
+				}
+			case "remote":
+				switch (diffType) {
+					case "added":
+						return "🗑️ Delete";
+					case "modified":
+						return "🔄 Replace with local";
+					case "deleted":
+						return "♻️ Recreate from local";
+					default:
+						return "Inverse";
+				}
+			default:
+				return "Inverse";
 		}
 	}
 
@@ -503,25 +511,28 @@ export class FileTreeModal extends Modal {
 			fileEl.addEventListener("click", () => this.openFile(path));
 		}
 
-		// Inverse checkbox (inverts the default action)
-		const inverseCheckbox = row.createDiv({ cls: "smart-sync-inverse-checkbox" });
-		inverseCheckbox.addClass("hidden");
+		// Inverse pill (only shown when inverse is true)
 		const isInverse = this.plugin.fileSelection[path]?.inverse === true;
-		inverseCheckbox.innerHTML = isInverse ? "🔄" : "➡️";
-		inverseCheckbox.addEventListener("click", (e) => {
-			e.stopPropagation();
-			if (this.plugin.fileSelection[path]) {
-				const currentInverse = this.plugin.fileSelection[path].inverse === true;
-				this.plugin.fileSelection[path].inverse = currentInverse ? undefined : true;
-				inverseCheckbox.innerHTML = currentInverse ? "➡️" : "🔄";
-			}
-		});
+		if (isInverse && _location && this.plugin.fileSelection[path]) {
+			const inversePill = row.createDiv({
+				cls: ["smart-sync-inverse-checkbox", "smart-sync-pill"],
+				text: this.getInversePillText(_location, type),
+			});
+			inversePill.setAttr("aria-label", "Remove inverse action");
+			inversePill.addEventListener("click", (e) => {
+				e.stopPropagation();
+				if (this.plugin.fileSelection[path]) {
+					this.plugin.fileSelection[path].inverse = undefined;
+					this.renderFileTrees();
+				}
+			});
+		}
 
 		// Action menu button (three dots)
 		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", text: "⋮" });
 		menuBtn.addEventListener("click", (e) => e.stopPropagation());
 
-		this.createContextMenu(menuBtn, path);
+		this.createContextMenu(menuBtn, path, _location, type);
 	}
 
 	private renderConflictRow(container: HTMLElement, path: string) {
@@ -597,7 +608,7 @@ export class FileTreeModal extends Modal {
 		this.createContextMenu(menuBtn, path);
 	}
 
-	private createContextMenu(button: HTMLElement, path: string): void {
+	private createContextMenu(button: HTMLElement, path: string, location?: Location, diffType?: DiffType): void {
 		const menu = document.createElement("div");
 		menu.addClass("smart-sync-context-menu");
 		this.dropdownContainer.appendChild(menu);
@@ -609,6 +620,32 @@ export class FileTreeModal extends Modal {
 		];
 		if (!path.startsWith(this.app.vault.configDir)) {
 			items.unshift({ label: "📝 Open in Obsidian", action: () => this.openFile(path) });
+		}
+
+		// Add invert/remove inverse action option for regular files
+		if (location && diffType && diffType !== "except") {
+			const isInverse = this.plugin.fileSelection[path]?.inverse === true;
+			if (isInverse) {
+				items.unshift({
+					label: "❌ Remove inverse action",
+					action: () => {
+						if (this.plugin.fileSelection[path]) {
+							this.plugin.fileSelection[path].inverse = undefined;
+							this.renderFileTrees();
+						}
+					},
+				});
+			} else {
+				items.unshift({
+					label: "🔄 Invert action",
+					action: () => {
+						if (this.plugin.fileSelection[path]) {
+							this.plugin.fileSelection[path].inverse = true;
+							this.renderFileTrees();
+						}
+					},
+				});
+			}
 		}
 
 		items.forEach((item) => {

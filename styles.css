@@ -172,6 +172,25 @@
     text-align: center;
 }
 
+/* Inverse Pill */
+.smart-sync-pill {
+    padding: 4px 12px;
+    background: #fb464c;
+    color: var(--text-on-accent);
+    border-radius: 50px;
+    font-size: var(--font-ui-smaller);
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.smart-sync-pill:hover {
+    background: #a91c1c; 
+    transform: scale(1.05);
+}
+
 /* Path Container */
 .smart-sync-path-container {
     flex: 1;
@@ -231,7 +250,7 @@
     flex-shrink: 0;
 }
 
-.smart-sync-action-select.hidden {
+.smart-sync-hidden {
     display: none;
 }
 
