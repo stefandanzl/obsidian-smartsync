@@ -246,6 +246,9 @@
 
 /* Inverse Pill */
 .smart-sync-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
 	padding: 4px 12px;
 	background: #fb464c;
 	color: var(--text-on-accent);
@@ -256,6 +259,17 @@
 	white-space: nowrap;
 	transition: all 0.2s ease;
 	user-select: none;
+}
+
+.smart-sync-pill-icon {
+	display: inline-flex;
+	align-items: center;
+	line-height: 0;
+}
+
+.smart-sync-pill-icon svg {
+	width: 13px;
+	height: 13px;
 }
 
 .smart-sync-pill:hover {

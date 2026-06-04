@@ -74,7 +74,7 @@ export class FileTreeModal extends Modal {
 		selectToggleBtn.addEventListener("click", () => this.toggleSelectAll());
 
 		// Profile dropdown - native select
-		const profileSelect = headerBottom.createEl("select", { cls: "smart-sync-header-btn dropdown" });
+		const profileSelect = headerBottom.createEl("select", { cls: "dropdown" });
 		[
 			{ value: "default", label: "Default" },
 			{ value: "push", label: "Push" },
@@ -402,18 +402,32 @@ export class FileTreeModal extends Modal {
 		const isSelected = this.plugin.fileSelection[path]?.selected === true;
 		const isConflict = type === "except";
 		const row = container.createDiv({
-			cls: ["smart-sync-file-row", isConflict ? "smart-sync-conflict-row" : "", isSelected ? "selected" : ""],
+			cls: [
+				"smart-sync-file-row",
+				"HyperMD-list-line",
+				isConflict ? "smart-sync-conflict-row" : "",
+				isSelected ? "selected" : "",
+			],
 			attr: { "data-path": path },
 		});
 
 		// Checkbox
-		const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
-		setIcon(checkbox, isSelected ? "square-check-big" : "square");
+		const checkbox = row.createEl("input", {
+			cls: "task-list-item-checkbox",
+			type: "checkbox",
+			attr: {
+				type: "checkbox",
+				"data-task": isSelected ? "x" : " ",
+				checked: isSelected ? "" : null,
+			},
+		});
+		checkbox.checked = isSelected;
 		checkbox.addEventListener("click", (e) => {
 			e.stopPropagation();
 			this.toggleFileSelection(path);
 			const nowSelected = this.plugin.fileSelection[path]?.selected === true;
-			setIcon(checkbox, nowSelected ? "square-check-big" : "square");
+			checkbox.checked = nowSelected;
+			checkbox.setAttribute("data-task", nowSelected ? "x" : " ");
 			row.toggleClass("selected", nowSelected);
 		});
 
@@ -445,9 +459,11 @@ export class FileTreeModal extends Modal {
 		if (isInverse && _location && this.plugin.fileSelection[path]) {
 			const inversePill = row.createDiv({
 				cls: ["smart-sync-inverse-checkbox", "smart-sync-pill"],
-				text: this.getInversePillText(_location, type),
+				attr: { "aria-label": "Remove inverse action" },
 			});
-			inversePill.setAttr("aria-label", "Remove inverse action");
+			// const pillIcon = inversePill.createSpan({ cls: "smart-sync-pill-icon" });
+			// setIcon(pillIcon, this.getInversePillIcon(_location, type));
+			inversePill.createSpan({ text: this.getInversePillText(_location, type) });
 			inversePill.addEventListener("click", (e) => {
 				e.stopPropagation();
 				if (this.plugin.fileSelection[path]) {
@@ -552,15 +568,6 @@ export class FileTreeModal extends Modal {
 	private showContextMenu(ev: MouseEvent, path: string, location?: Location, diffType?: DiffType): void {
 		const menu = new Menu();
 
-		if (!path.startsWith(this.app.vault.configDir)) {
-			menu.addItem((item) =>
-				item
-					.setTitle("Open in Obsidian")
-					.setIcon("file-pen")
-					.onClick(() => this.openFile(path))
-			);
-		}
-
 		const isInverse = this.plugin.fileSelection[path]?.inverse === true;
 		if (location && diffType && diffType !== "except") {
 			if (isInverse) {
@@ -590,6 +597,15 @@ export class FileTreeModal extends Modal {
 			}
 		}
 
+		if (!path.startsWith(this.app.vault.configDir)) {
+			menu.addItem((item) =>
+				item
+					.setTitle("Open in Obsidian")
+					.setIcon("file-pen")
+					.onClick(() => this.openFile(path))
+			);
+		}
+
 		menu.addItem((item) =>
 			item
 				.setTitle("Open in Explorer")
@@ -611,25 +627,37 @@ export class FileTreeModal extends Modal {
 			case "local":
 				switch (diffType) {
 					case "added":
-						return "🗑️ Delete";
+						return "Delete"; //🗑️
 					case "modified":
-						return "🔄 Replace with remote";
+						return "Replace with remote"; //🔄
 					case "deleted":
-						return "♻️ Recreate from remote";
+						return "Recreate from remote"; //♻️
 					default:
 						return "Inverse";
 				}
 			case "remote":
 				switch (diffType) {
 					case "added":
-						return "🗑️ Delete";
+						return "Delete"; //🗑️
 					case "modified":
-						return "🔄 Replace with local";
+						return "Replace with local"; //🔄
 					case "deleted":
-						return "♻️ Recreate from local";
+						return "Recreate from local"; //♻️
 					default:
 						return "Inverse";
 				}
+			default:
+				return "Inverse";
+		}
+	}
+	private getInversePillIcon(location: Location, diffType: DiffType): string {
+		switch (diffType) {
+			case "added":
+				return "trash";
+			case "modified":
+				return "replace";
+			case "deleted":
+				return "recycle";
 			default:
 				return "Inverse";
 		}
