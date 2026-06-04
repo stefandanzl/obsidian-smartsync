@@ -36,18 +36,42 @@
 .smart-sync-header {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 20px;
+    justify-content: space-between;
     padding: 8px 12px;
     background: var(--background-secondary);
     border-bottom: 1px solid var(--background-modifier-border);
     flex-shrink: 0;
 }
 
+.smart-sync-header-top,
+.smart-sync-header-bottom {
+    display: flex;
+    align-items: center;
+    /* justify-content: space-between; */
+    gap: 8px;
+    /* flex: 1; */
+}
+
+/* Small screens - stack the two divs vertically */
+@media (max-width: 768px) {
+    .smart-sync-header {
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .smart-sync-header-bottom {
+        border-top: 1px solid var(--background-modifier-border-hover);
+        padding-top: 8px;
+    }
+}
+
 .smart-sync-status-indicator {
-    flex: 1;
+    /* flex: 1; */
     text-align: center;
     font-size: var(--font-ui-small);
     font-weight: var(--font-medium);
+    min-width: 200px;
 }
 
 .smart-sync-header-btn {
@@ -69,6 +93,17 @@
 
 .smart-sync-header-btn-right {
     margin-left: auto;
+}
+
+.smart-sync-primary-btn {
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.smart-sync-primary-btn:hover {
+    background: var(--interactive-accent-hover);
+    border-color: var(--interactive-accent-hover);
 }
 
 /* ============= FILES AREA ============= */
@@ -343,62 +378,6 @@
     background: var(--background-modifier-hover);
 }
 
-/* ============= FOOTER ============= */
-.smart-sync-footer {
-    position: relative;
-    display: flex;
-    align-items: center;
-    padding: 24px 20px;
-
-    background: var(--background-secondary);
-    border-top: 1px solid var(--background-modifier-border);
-    flex-shrink: 0;
-}
-
-.smart-sync-footer-spacer {
-    flex: 1;
-}
-
-.smart-sync-footer-right {
-    position: absolute;
-    right: 20px;
-    display: flex;
-    gap: 8px;
-}
-
-.smart-sync-footer-btn {
-    padding: 10px 20px;
-    background: var(--interactive-normal);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    color: var(--text-normal);
-    font-size: var(--font-ui-small);
-    font-weight: var(--font-medium);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-
-.smart-sync-footer-btn:hover {
-    background: var(--interactive-hover);
-    border-color: var(--interactive-hover);
-}
-
-.smart-sync-primary-btn {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--interactive-accent);
-    border-color: var(--interactive-accent);
-    color: var(--text-on-accent);
-    padding: 10px 24px;
-}
-
-.smart-sync-primary-btn:hover {
-    background: var(--interactive-accent-hover);
-    border-color: var(--interactive-accent-hover);
-}
-
 /* Confirmation Dialog */
 .smart-sync-confirm-text {
     padding: 20px;
@@ -489,36 +468,19 @@
         flex-basis: 150px;
     }
 
-    .smart-sync-footer {
-        flex-wrap: wrap;
-        padding: 12px;
-        gap: 8px;
-        height: auto;
+    .smart-sync-header-top,
+    .smart-sync-header-bottom {
+        padding: 10px 8px;
     }
 
-    .smart-sync-footer-spacer {
-        display: none;
-    }
-
-    .smart-sync-primary-btn {
-        position: static;
-        transform: none;
-        order: -1;
-        width: 100%;
-        margin-bottom: 8px;
-    }
-
-    .smart-sync-footer-right {
-        position: static;
-        width: 100%;
-        justify-content: center;
-    }
-
-    .smart-sync-footer-btn {
-        flex: 1;
-        min-width: 80px;
-        padding: 10px 12px;
+    .smart-sync-header-btn {
+        padding: 6px 12px;
         font-size: var(--font-ui-smaller);
+    }
+
+    .smart-sync-status-indicator {
+        font-size: var(--font-ui-smaller);
+        min-width: 150px;
     }
 }
 

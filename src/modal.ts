@@ -29,15 +29,38 @@ export class FileTreeModal extends Modal {
 
 		// ============= HEADER =============
 		const header = container.createDiv({ cls: "smart-sync-header" });
+		const headerTop = header.createDiv({ cls: "smart-sync-header-top" });
+		const headerBottom = header.createDiv({ cls: "smart-sync-header-bottom" });
 
-		const selectToggleBtn = header.createEl("button", {
+		// TOP ROW: Status | Reload | Sync
+		this.statusIndicator = headerTop.createSpan({
+			cls: "smart-sync-status-indicator",
+		});
+		this.updateStatusIndicator();
+
+		const reloadBtn = headerTop.createEl("button", {
+			text: "🔄 Reload",
+			cls: "smart-sync-header-btn",
+		});
+		reloadBtn.addEventListener("click", async () => {
+			await this.plugin.operations.check();
+			this.updateSyncButton();
+		});
+
+		this.syncButton = headerTop.createEl("button", {
+			text: `🔄 Sync (0)`,
+			cls: ["smart-sync-header-btn", "smart-sync-primary-btn"],
+		});
+		this.syncButton.addEventListener("click", () => this.syncSelected());
+
+		// BOTTOM ROW: Select All | Sync Profile | Maintenance
+		const selectToggleBtn = headerBottom.createEl("button", {
 			text: "☑️ Select All",
 			cls: "smart-sync-header-btn",
 		});
 		selectToggleBtn.addEventListener("click", () => this.toggleSelectAll(selectToggleBtn));
 
-		// Sync Profile Dropdown
-		const profileSelect = header.createEl("select", { cls: "smart-sync-header-btn" });
+		const profileSelect = headerBottom.createEl("select", { cls: "smart-sync-header-btn" });
 		profileSelect.createEl("option", { value: "default", text: "🔄 Default" });
 		profileSelect.createEl("option", { value: "push", text: "⬆️ Push" });
 		profileSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
@@ -49,49 +72,9 @@ export class FileTreeModal extends Modal {
 			this.applyProfile(profile);
 		});
 
-		// Status indicator in the center
-		this.statusIndicator = header.createSpan({
-			cls: "smart-sync-status-indicator",
-		});
-		this.updateStatusIndicator();
-
-		const reloadBtn = header.createEl("button", {
-			text: "🔄 Reload",
-			cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
-		});
-		reloadBtn.addEventListener("click", async () => {
-			await this.plugin.operations.check();
-			this.updateSyncButton();
-		});
-
-		// ============= FILES AREA =============
-		this.fileTreeDiv = container.createDiv({ cls: "smart-sync-files-area" });
-
-		// Save scroll position
-		this.fileTreeDiv.addEventListener("scroll", (e) => {
-			this.plugin.lastScrollPosition = (e.target as HTMLElement).scrollTop;
-		});
-
-		// ============= FOOTER =============
-		const footer = container.createDiv({ cls: "smart-sync-footer" });
-
-		// Left side - empty for balance
-		footer.createDiv({ cls: "smart-sync-footer-spacer" });
-
-		// Center - Sync Button
-		this.syncButton = footer.createEl("button", {
-			text: `🔄 Sync (0)`,
-			cls: ["smart-sync-footer-btn", "smart-sync-primary-btn"],
-		});
-		this.syncButton.addEventListener("click", () => this.syncSelected());
-
-		// Right side - Maintenance button
-		const rightActions = footer.createDiv({ cls: "smart-sync-footer-right" });
-
-		// Maintenance Dropdown
-		const maintenanceBtn = rightActions.createEl("button", {
+		const maintenanceBtn = headerBottom.createEl("button", {
 			text: "🔧",
-			cls: "smart-sync-footer-btn",
+			cls: "smart-sync-header-btn",
 			title: "Maintenance",
 		});
 		this.createDropdown(maintenanceBtn, [
@@ -101,6 +84,14 @@ export class FileTreeModal extends Modal {
 			{ label: "⚙️ SmartSync Settings", action: () => this.openSettings() },
 			{ label: "⏸️ Pause Sync", action: () => this.togglePause() },
 		]);
+
+		// ============= FILES AREA =============
+		this.fileTreeDiv = container.createDiv({ cls: "smart-sync-files-area" });
+
+		// Save scroll position
+		this.fileTreeDiv.addEventListener("scroll", (e) => {
+			this.plugin.lastScrollPosition = (e.target as HTMLElement).scrollTop;
+		});
 
 		// Close dropdowns when clicking outside
 		document.addEventListener("click", (e) => {
