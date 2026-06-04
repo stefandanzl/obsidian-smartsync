@@ -6,7 +6,11 @@ import { dirname } from "./util";
 
 export class FileTreeModal extends Modal {
 	fileTreeDiv: HTMLDivElement;
-	statusIndicator: HTMLSpanElement;
+	statusIndicator: {
+		div: HTMLDivElement;
+		icon: HTMLSpanElement;
+		text: HTMLSpanElement;
+	};
 
 	constructor(
 		app: App,
@@ -29,17 +33,20 @@ export class FileTreeModal extends Modal {
 		const headerBottom = header.createDiv({ cls: "smart-sync-header-bottom" });
 
 		// TOP ROW: Status | Reload | Sync
-		this.statusIndicator = headerTop.createSpan({
-			cls: "smart-sync-status-indicator",
-		});
+		const statusEl = headerTop.createDiv({ cls: "smart-sync-status-indicator" });
+		this.statusIndicator = {
+			div: statusEl,
+			icon: statusEl.createSpan({ cls: "smart-sync-status-icon" }),
+			text: statusEl.createSpan({ cls: "smart-sync-status-text" }),
+		};
 		this.updateStatusIndicator();
 
 		const reloadBtn = headerTop.createEl("button", {
 			cls: "smart-sync-header-btn",
-			title: "Reload",
+			attr: { "aria-label": "Reload file tree" },
 		});
-		setIcon(reloadBtn, "refresh-cw");
-		reloadBtn.createSpan({ text: " Reload" });
+		setIcon(reloadBtn, "search");
+		reloadBtn.createSpan({ text: "Reload" });
 		reloadBtn.addEventListener("click", async () => {
 			await this.plugin.operations.check();
 			this.updateSyncButton();
@@ -47,56 +54,42 @@ export class FileTreeModal extends Modal {
 
 		this.syncButton = headerTop.createEl("button", {
 			cls: ["smart-sync-header-btn", "smart-sync-primary-btn"],
+			attr: { "aria-label": "Sync selected files" },
 		});
 		setIcon(this.syncButton, "refresh-cw");
-		this.syncButtonLabel = this.syncButton.createSpan({ text: " Sync (0)" });
+		this.syncButtonLabel = this.syncButton.createSpan({ text: "Sync (0)" });
 		this.syncButton.addEventListener("click", () => this.syncSelected());
 
 		// BOTTOM ROW: Select All | Sync Profile | Maintenance
 		const selectToggleBtn = headerBottom.createEl("button", {
-			cls: "smart-sync-header-btn",
+			cls: "smart-sync-header-btn smart-sync-select-toggle-btn",
+			attr: { "aria-label": "Toggle select all files" },
 		});
-		this.selectToggleIcon = selectToggleBtn.createSpan();
-		setIcon(this.selectToggleIcon, "square-check");
-		selectToggleBtn.createSpan({ text: " Select All" });
-		selectToggleBtn.addEventListener("click", () => this.toggleSelectAll(selectToggleBtn));
+		this.selectToggleIcon = selectToggleBtn.createSpan({ cls: "smart-sync-select-toggle-icon" });
+		setIcon(this.selectToggleIcon, "square-check-big");
+		this.selectToggleLabel = selectToggleBtn.createSpan({
+			cls: "smart-sync-select-toggle-label",
+			text: "Select All",
+		});
+		selectToggleBtn.addEventListener("click", () => this.toggleSelectAll());
 
-		// Profile dropdown as Menu
-		const profileBtn = headerBottom.createEl("button", {
-			cls: "smart-sync-header-btn",
-			title: "Sync Profile",
-		});
-		setIcon(profileBtn, "arrow-up-down");
-		this.profileLabel = profileBtn.createSpan({ text: " Default" });
-		profileBtn.addEventListener("click", (ev) => {
-			const profiles: { value: SyncProfile; label: string; icon: string }[] = [
-				{ value: "default", label: "Default", icon: "arrow-up-down" },
-				{ value: "push", label: "Push", icon: "arrow-up-from-line" },
-				{ value: "pull", label: "Pull", icon: "arrow-down-to-line" },
-				{ value: "replicateLocal", label: "Replicate Local", icon: "upload" },
-				{ value: "replicateRemote", label: "Replicate Remote", icon: "download" },
-			];
-			const menu = new Menu();
-			for (const p of profiles) {
-				menu.addItem((item) =>
-					item
-						.setTitle(p.label)
-						.setIcon(p.icon)
-						.setChecked(this.currentProfile === p.value)
-						.onClick(() => {
-							this.currentProfile = p.value;
-							setIcon(profileBtn, p.icon);
-							this.profileLabel.textContent = ` ${p.label}`;
-							this.applyProfile(p.value);
-						})
-				);
-			}
-			menu.showAtMouseEvent(ev);
-		});
+		// Profile dropdown - native select
+		const profileSelect = headerBottom.createEl("select", { cls: "smart-sync-header-btn dropdown" });
+		[
+			{ value: "default", label: "Default" },
+			{ value: "push", label: "Push" },
+			{ value: "pull", label: "Pull" },
+			{ value: "replicateLocal", label: "Replicate Local" },
+			{ value: "replicateRemote", label: "Replicate Remote" },
+		].forEach(({ value, label }) => profileSelect.createEl("option", { value, text: label }));
+		profileSelect.value = "default";
+		profileSelect.addEventListener("change", () => this.applyProfile(profileSelect.value as SyncProfile));
+
+		profileSelect.setAttribute("aria-label", "Sync profile");
 
 		const maintenanceBtn = headerBottom.createEl("button", {
 			cls: "smart-sync-header-btn",
-			title: "Maintenance",
+			attr: { "aria-label": "Maintenance options" },
 		});
 		setIcon(maintenanceBtn, "sliders-horizontal");
 		maintenanceBtn.onclick = (ev) => {
@@ -152,10 +145,9 @@ export class FileTreeModal extends Modal {
 	private syncButton: HTMLButtonElement;
 	private syncButtonLabel: HTMLSpanElement;
 	private selectToggleIcon: HTMLSpanElement;
-	private profileLabel: HTMLSpanElement;
-	private currentProfile: SyncProfile = "default";
+	private selectToggleLabel: HTMLSpanElement;
 
-	private toggleSelectAll(btn: HTMLButtonElement) {
+	private toggleSelectAll() {
 		const allPaths = this.getAllFilePaths();
 		const allSelected =
 			allPaths.length > 0 && allPaths.every((path) => this.plugin.fileSelection[path]?.selected === true);
@@ -166,8 +158,8 @@ export class FileTreeModal extends Modal {
 					this.plugin.fileSelection[path].selected = false;
 				}
 			}
-			setIcon(this.selectToggleIcon, "square-check");
-			btn.childNodes[1].textContent = " Select All";
+			setIcon(this.selectToggleIcon, "square-check-big");
+			this.selectToggleLabel.textContent = "Select All";
 		} else {
 			for (const path of allPaths) {
 				if (this.plugin.fileSelection[path]) {
@@ -175,7 +167,7 @@ export class FileTreeModal extends Modal {
 				}
 			}
 			setIcon(this.selectToggleIcon, "square");
-			btn.childNodes[1].textContent = " Select None";
+			this.selectToggleLabel.textContent = "Select None";
 		}
 		this.renderFileTrees();
 		this.updateSyncButton();
@@ -190,7 +182,7 @@ export class FileTreeModal extends Modal {
 
 	private updateSyncButton() {
 		const count = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
-		this.syncButtonLabel.textContent = ` Sync (${count})`;
+		this.syncButtonLabel.textContent = `Sync (${count})`;
 	}
 
 	private applyProfile(profile: SyncProfile) {
@@ -292,8 +284,9 @@ export class FileTreeModal extends Modal {
 	updateStatusIndicator() {
 		const status = this.plugin.status;
 		const statusItem = STATUS_ITEMS[status];
-		this.statusIndicator.textContent = `${statusItem.emoji} ${statusItem.label}`;
-		this.statusIndicator.setCssProps({ color: statusItem.color });
+		setIcon(this.statusIndicator.icon, statusItem.lucide ?? "circle");
+		this.statusIndicator.text.textContent = statusItem.label;
+		this.statusIndicator.div.setCssProps({ color: statusItem.color });
 	}
 
 	private getAllFilePaths(): string[] {
@@ -343,9 +336,9 @@ export class FileTreeModal extends Modal {
 		];
 
 		const types: Array<{ key: keyof FileTree; title: string; icon: string; color: string }> = [
-			{ key: "added", title: "Added", icon: "➕", color: "green" },
-			{ key: "modified", title: "Modified", icon: "✏️", color: "orange" },
-			{ key: "deleted", title: "Deleted", icon: "🗑️", color: "red" },
+			{ key: "added", title: "Added", icon: "file-plus", color: "green" },
+			{ key: "modified", title: "Modified", icon: "file-pen", color: "orange" },
+			{ key: "deleted", title: "Deleted", icon: "file-minus", color: "red" },
 		];
 
 		locations.forEach(({ key, title, icon }) => {
@@ -357,17 +350,18 @@ export class FileTreeModal extends Modal {
 			const locationEl = this.fileTreeDiv.createDiv({ cls: "smart-sync-location" });
 			const locationTitle = locationEl.createDiv({ cls: "smart-sync-location-title" });
 			setIcon(locationTitle.createSpan({ cls: "smart-sync-location-icon" }), icon);
-			locationTitle.createSpan({ text: ` ${title}` });
+			locationTitle.createSpan({ text: title });
 
 			types.forEach(({ key: typeKey, title: typeTitle, icon: typeIcon, color }) => {
 				const files = locationData[typeKey];
 				if (Object.keys(files).length === 0) return;
 
 				const sectionEl = locationEl.createDiv({ cls: "smart-sync-section" });
-				sectionEl.createDiv({
+				const sectionTitle = sectionEl.createDiv({
 					cls: ["smart-sync-section-title", `smart-sync-section-${color}`],
-					text: `${typeIcon} ${typeTitle} (${Object.keys(files).length})`,
 				});
+				setIcon(sectionTitle.createSpan({ cls: "smart-sync-section-icon" }), typeIcon);
+				sectionTitle.createSpan({ text: ` ${typeTitle} (${Object.keys(files).length})` });
 
 				const filesContainer = sectionEl.createDiv({ cls: "smart-sync-files-list" });
 
@@ -383,13 +377,16 @@ export class FileTreeModal extends Modal {
 
 		if (hasConflicts) {
 			const conflictLocationEl = this.fileTreeDiv.createDiv({ cls: "smart-sync-location" });
-			conflictLocationEl.createDiv({ cls: "smart-sync-location-title", text: "⚔️ Conflicts" });
+			const conflictLocationTitle = conflictLocationEl.createDiv({ cls: "smart-sync-location-title" });
+			setIcon(conflictLocationTitle.createSpan({ cls: "smart-sync-location-icon" }), "swords");
+			conflictLocationTitle.createSpan({ text: "Conflicts" });
 
 			const conflictSectionEl = conflictLocationEl.createDiv({ cls: "smart-sync-section" });
-			conflictSectionEl.createDiv({
+			const conflictSectionTitle = conflictSectionEl.createDiv({
 				cls: ["smart-sync-section-title", "smart-sync-section-purple"],
-				text: `⚠️ Both sides changed (${Object.keys(conflictFiles).length})`,
 			});
+			setIcon(conflictSectionTitle.createSpan({ cls: "smart-sync-section-icon" }), "triangle-alert");
+			conflictSectionTitle.createSpan({ text: ` Both sides changed (${Object.keys(conflictFiles).length})` });
 
 			const conflictFilesContainer = conflictSectionEl.createDiv({ cls: "smart-sync-files-list" });
 
@@ -411,12 +408,12 @@ export class FileTreeModal extends Modal {
 
 		// Checkbox
 		const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
-		setIcon(checkbox, isSelected ? "square-check" : "square");
+		setIcon(checkbox, isSelected ? "square-check-big" : "square");
 		checkbox.addEventListener("click", (e) => {
 			e.stopPropagation();
 			this.toggleFileSelection(path);
 			const nowSelected = this.plugin.fileSelection[path]?.selected === true;
-			setIcon(checkbox, nowSelected ? "square-check" : "square");
+			setIcon(checkbox, nowSelected ? "square-check-big" : "square");
 			row.toggleClass("selected", nowSelected);
 		});
 
@@ -461,7 +458,7 @@ export class FileTreeModal extends Modal {
 		}
 
 		// Context menu button
-		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn" });
+		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", attr: { "aria-label": "File actions" } });
 		setIcon(menuBtn, "more-vertical");
 		menuBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
@@ -484,12 +481,12 @@ export class FileTreeModal extends Modal {
 
 		// Checkbox
 		const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
-		setIcon(checkbox, isSelected ? "square-check" : "square");
+		setIcon(checkbox, isSelected ? "square-check-big" : "square");
 		checkbox.addEventListener("click", (e) => {
 			e.stopPropagation();
 			this.toggleFileSelection(path);
 			const nowSelected = this.plugin.fileSelection[path]?.selected === true;
-			setIcon(checkbox, nowSelected ? "square-check" : "square");
+			setIcon(checkbox, nowSelected ? "square-check-big" : "square");
 			row.toggleClass("selected", nowSelected);
 		});
 
@@ -538,7 +535,7 @@ export class FileTreeModal extends Modal {
 		});
 
 		// Context menu button
-		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn" });
+		const menuBtn = row.createDiv({ cls: "smart-sync-menu-btn", attr: { "aria-label": "File actions" } });
 		setIcon(menuBtn, "more-vertical");
 		menuBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
@@ -677,32 +674,59 @@ export class FileTreeModal extends Modal {
 			case "jpeg":
 			case "gif":
 			case "svg":
+			case "webp":
 				return "file-image";
 			case "mp3":
 			case "wav":
 			case "ogg":
+			case "flac":
 				return "file-audio";
 			case "mp4":
 			case "avi":
 			case "mov":
+			case "mkv":
 				return "file-video";
 			case "zip":
 			case "rar":
 			case "7z":
+			case "tar":
+			case "gz":
 				return "archive";
 			case "js":
 			case "ts":
 			case "jsx":
 			case "tsx":
-				return "file-code";
 			case "py":
-				return "file-code";
 			case "java":
-				return "file-code";
 			case "cpp":
 			case "c":
 			case "h":
+			case "go":
+			case "rs":
+			case "rb":
+			case "php":
+			case "swift":
+			case "kt":
 				return "file-code";
+			case "css":
+			case "scss":
+			case "sass":
+			case "less":
+				return "file-braces";
+			case "json":
+			case "jsonc":
+				return "file-braces";
+			case "yaml":
+			case "yml":
+			case "toml":
+			case "ini":
+			case "env":
+				return "file-cog";
+			case "xlsx":
+			case "xls":
+			case "csv":
+			case "tsv":
+				return "file-spreadsheet";
 			default:
 				return "file-question";
 		}
