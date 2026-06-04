@@ -1,7 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import SmartSyncPlugin from "./main";
 import { DiffModal } from "./diffModal";
-import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, DiffType } from "./const";
+import { FileTree, FileTrees, Location, PLUGIN_ID, STATUS_ITEMS, Status, DiffType, SyncProfile } from "./const";
 import { dirname } from "./util";
 
 export class FileTreeModal extends Modal {
@@ -35,6 +35,19 @@ export class FileTreeModal extends Modal {
 			cls: "smart-sync-header-btn",
 		});
 		selectToggleBtn.addEventListener("click", () => this.toggleSelectAll(selectToggleBtn));
+
+		// Sync Profile Dropdown
+		const profileSelect = header.createEl("select", { cls: "smart-sync-header-btn" });
+		profileSelect.createEl("option", { value: "default", text: "🔄 Default" });
+		profileSelect.createEl("option", { value: "push", text: "⬆️ Push" });
+		profileSelect.createEl("option", { value: "pull", text: "⬇️ Pull" });
+		profileSelect.createEl("option", { value: "replicateLocal", text: "📋 Replicate Local" });
+		profileSelect.createEl("option", { value: "replicateRemote", text: "🌐 Replicate Remote" });
+		profileSelect.value = "default";
+		profileSelect.addEventListener("change", (e) => {
+			const profile = (e.target as HTMLSelectElement).value as SyncProfile;
+			this.applyProfile(profile);
+		});
 
 		// Status indicator in the center
 		this.statusIndicator = header.createSpan({
@@ -72,41 +85,8 @@ export class FileTreeModal extends Modal {
 		});
 		this.syncButton.addEventListener("click", () => this.syncSelected());
 
-		// Right side - Action buttons
+		// Right side - Maintenance button
 		const rightActions = footer.createDiv({ cls: "smart-sync-footer-right" });
-
-		// Special Actions Dropdown
-		const specialActionsBtn = rightActions.createEl("button", {
-			text: "⚡ Actions",
-			cls: "smart-sync-footer-btn",
-		});
-		this.createDropdown(specialActionsBtn, [
-			{
-				label: "📋 Replicate Local → Remote",
-				action: () =>
-					this.confirmAndRun("Replicate local on remote", () => this.plugin.operations.duplicateLocal()),
-			},
-			{
-				label: "🌐 Replicate Remote → Local",
-				action: () =>
-					this.confirmAndRun("Replicate remote on local", () => this.plugin.operations.duplicateRemote()),
-			},
-			{
-				label: "⬆️ Push Selected",
-				action: () => this.confirmAndRun("Push selected files", () => this.pushSelected()),
-			},
-			{
-				label: "⬇️ Pull Selected",
-				action: () => this.confirmAndRun("Pull selected files", () => this.pullSelected()),
-			},
-		]);
-
-		// // Toggle explicit action selects
-		// const toggleActionsBtn = header.createEl("button", {
-		//     text: "⚙️Show Actions",
-		//     cls: ["smart-sync-header-btn", "smart-sync-header-btn-right"],
-		// });
-		// toggleActionsBtn.addEventListener("click", () => this.toggleActionSelects(toggleActionsBtn));
 
 		// Maintenance Dropdown
 		const maintenanceBtn = rightActions.createEl("button", {
@@ -176,6 +156,71 @@ export class FileTreeModal extends Modal {
 	private updateSyncButton() {
 		const count = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
 		this.syncButton.textContent = `🔄 Sync (${count})`;
+	}
+
+	private applyProfile(profile: SyncProfile) {
+		for (const selection of Object.values(this.plugin.fileSelection)) {
+			const location = selection.location;
+			const diffType = selection.diffType;
+
+			switch (profile) {
+				case "push":
+					if (location === "local") {
+						selection.selected = true;
+						selection.inverse = undefined;
+					} else if (location === "remote") {
+						selection.selected = false;
+					}
+					if (diffType === "except") {
+						selection.location = "local";
+					}
+					break;
+				case "pull":
+					if (location === "local") {
+						selection.selected = false;
+					} else if (location === "remote") {
+						selection.selected = true;
+						selection.inverse = undefined;
+					}
+					if (diffType === "except") {
+						selection.location = "remote";
+					}
+					break;
+				case "replicateLocal":
+					if (location === "local") {
+						selection.selected = true;
+						selection.inverse = undefined;
+					} else if (location === "remote") {
+						selection.selected = true;
+						selection.inverse = true;
+					}
+					if (diffType === "except") {
+						selection.location = "local";
+					}
+					break;
+				case "replicateRemote":
+					if (location === "local") {
+						selection.selected = true;
+						selection.inverse = true;
+					} else if (location === "remote") {
+						selection.selected = true;
+						selection.inverse = undefined;
+					}
+					if (diffType === "except") {
+						selection.location = "remote";
+					}
+					break;
+				case "default":
+					selection.selected = true;
+					selection.inverse = undefined;
+					if (diffType === "except") {
+						selection.location = undefined;
+					}
+					break;
+			}
+		}
+		this.renderFileTrees();
+		this.updateSyncButton();
 	}
 
 	private initializeSelectedFiles() {
@@ -286,33 +331,6 @@ export class FileTreeModal extends Modal {
 		});
 	}
 
-	private confirmAndRun(actionName: string, action: () => void) {
-		const confirm = new Modal(this.app);
-		confirm.contentEl.createEl("p", {
-			text: `Are you sure you want to ${actionName.toLowerCase()}?`,
-			cls: "smart-sync-confirm-text",
-		});
-
-		const btnContainer = confirm.contentEl.createDiv({ cls: "smart-sync-confirm-buttons" });
-
-		const yesBtn = btnContainer.createEl("button", {
-			text: "Yes",
-			cls: ["mod-cta", "smart-sync-confirm-btn"],
-		});
-		yesBtn.addEventListener("click", () => {
-			action();
-			confirm.close();
-		});
-
-		const noBtn = btnContainer.createEl("button", {
-			text: "No",
-			cls: "smart-sync-confirm-btn",
-		});
-		noBtn.addEventListener("click", () => confirm.close());
-
-		confirm.open();
-	}
-
 	private async syncSelected() {
 		const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
 		if (selectedCount === 0) {
@@ -320,18 +338,6 @@ export class FileTreeModal extends Modal {
 			return;
 		}
 		this.plugin.operations.fullSync();
-	}
-
-	private async pushSelected() {
-		const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
-		new Notice(`Pushing ${selectedCount} files`);
-		this.plugin.operations.push();
-	}
-
-	private async pullSelected() {
-		const selectedCount = Object.values(this.plugin.fileSelection).filter((v) => v.selected === true).length;
-		new Notice(`Pulling ${selectedCount} files`);
-		this.plugin.operations.pull();
 	}
 
 	private clearErrors() {
