@@ -12,6 +12,8 @@ vars:
     sh: node -e "console.log(require('./package.json').version)"
   TIME:
     sh: date +%H:%M:%S.%3N
+  BUNDLE_SIZE:
+    sh: node -e "console.log(require('./meta.json').outputs['main.js'].bytes)"
   FILES: ["main.js", "manifest.json", "styles.css"]
 
 dotenv: [".env"] # Copy .env-example to .env and modify according to Obsidian setup
@@ -24,6 +26,7 @@ tasks:
       - task: build
       - task: copy
       - task: reload-app
+      - task: bundle-size
       - task: date
 
   build:
@@ -51,6 +54,10 @@ tasks:
       - obsidian command id=app:reload
 
   ####################################### TOOLING #######################################
+  bundle-size:
+    aliases: [bundle, size]
+    silent: true
+    cmd: echo '{{.BUNDLE_SIZE}} bytes'
 
   dev: npm run dev
 
