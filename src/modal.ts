@@ -327,6 +327,7 @@ export class FileTreeModal extends Modal {
 				text: "✓ No changes to sync",
 			});
 			this.plugin.sessionSynced = true;
+			this.updateSyncButton();
 			return;
 		}
 
@@ -394,7 +395,7 @@ export class FileTreeModal extends Modal {
 				this.renderConflictRow(conflictFilesContainer, path);
 			});
 		}
-
+		this.updateSyncButton();
 		this.fileTreeDiv.scrollTop = this.plugin.lastScrollPosition;
 	}
 

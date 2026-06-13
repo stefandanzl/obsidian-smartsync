@@ -548,6 +548,13 @@ export class Operations {
 			}
 		}
 
+		// Clean up fileSelection for successfully synced files
+		for (const filePath of Object.keys(allSyncedFiles)) {
+			if (this.plugin.fileSelection[filePath]) {
+				delete this.plugin.fileSelection[filePath];
+			}
+		}
+
 		// Warning for failed files
 		if (Object.keys(this.newPrevDataFiles.failed).length > 0) {
 			this.plugin.show(`Warning: ${Object.keys(this.newPrevDataFiles.failed).length} files failed to sync`, 5000);

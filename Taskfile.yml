@@ -57,6 +57,7 @@ tasks:
   bundle-size:
     aliases: [bundle, size]
     silent: true
+    ignore_error: true
     cmd: echo '{{.BUNDLE_SIZE}} bytes'
 
   dev: npm run dev
