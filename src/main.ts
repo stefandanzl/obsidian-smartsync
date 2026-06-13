@@ -172,21 +172,7 @@ export default class SmartSync extends Plugin {
 					return;
 				}
 
-				await this.operations.sync(
-					{
-						local: {
-							added: 1,
-							deleted: 1,
-							modified: 1,
-						},
-						remote: {
-							added: 1,
-							deleted: 1,
-							modified: 1,
-						},
-					},
-					false
-				);
+				await this.operations.sync(false);
 				// }
 			}, this.settings.autoSyncInterval * 1000);
 		}

@@ -11,261 +11,244 @@ import { Status } from "./const";
 import { DailyNoteManager } from "./dailynote";
 
 export async function launcher(plugin: SmartSync) {
-    await plugin.loadSettings();
+	await plugin.loadSettings();
 
-    // plugin adds a settings tab so the user can configure various aspects of the plugin
-    plugin.addSettingTab(new SmartSyncSettingsTab(plugin.app, plugin));
+	// plugin adds a settings tab so the user can configure various aspects of the plugin
+	plugin.addSettingTab(new SmartSyncSettingsTab(plugin.app, plugin));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    plugin.settingPrivate = (this.app as any).setting;
-    plugin.fileSelection = {};
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	plugin.settingPrivate = (this.app as any).setting;
+	plugin.fileSelection = {};
 
-    plugin.compare = new Compare(plugin);
-    plugin.checksum = new Checksum(plugin);
-    plugin.operations = new Operations(plugin);
-    plugin.dailyNote = new DailyNoteManager(plugin);
+	plugin.compare = new Compare(plugin);
+	plugin.checksum = new Checksum(plugin);
+	plugin.operations = new Operations(plugin);
+	plugin.dailyNote = new DailyNoteManager(plugin);
 
-    plugin.mobile = Platform.isMobileApp;
-    plugin.settings.exclusionsOverride = false;
-    plugin.prevPath = `${plugin.app.vault.configDir}/plugins/smartSync/prevdata.json`;
-    // console.log(plugin.prevPath)
+	plugin.mobile = Platform.isMobileApp;
+	plugin.settings.exclusionsOverride = false;
+	plugin.prevPath = `${plugin.app.vault.configDir}/plugins/smartSync/prevdata.json`;
+	// console.log(plugin.prevPath)
 
-    plugin.sessionSynced = false;
+	plugin.sessionSynced = false;
 
-    plugin.hashFlags = {
-        cache: true,
-        prevData: true
-    }
+	plugin.hashFlags = {
+		cache: true,
+		prevData: true,
+	};
 
-    plugin.allFiles = {
-        local: {},
-        remote: {},
-    };
+	plugin.allFiles = {
+		local: {},
+		remote: {},
+	};
 
-    if (plugin.settings.enableRibbons) {
-        plugin.addRibbonIcon("calendar", "Open Daily Note with SmartSync", (event: MouseEvent) => {
-            let middleCick = false;
-            if (event.button === 1) {
-                event.preventDefault();
-                middleCick = true;
-            } else if (event.button === 0 && event.ctrlKey) {
-                event.preventDefault();
-                middleCick = true;
-            }
+	if (plugin.settings.enableRibbons) {
+		plugin.addRibbonIcon("calendar", "Open Daily Note with SmartSync", (event: MouseEvent) => {
+			let middleCick = false;
+			if (event.button === 1) {
+				event.preventDefault();
+				middleCick = true;
+			} else if (event.button === 0 && event.ctrlKey) {
+				event.preventDefault();
+				middleCick = true;
+			}
 
-            plugin.dailyNote.dailyNote(middleCick);
-        });
+			plugin.dailyNote.dailyNote(middleCick);
+		});
 
-        plugin.addRibbonIcon("arrow-down-up", "Check and Sync with SmartSync", async () => {
-            await plugin.operations.check();
-            await plugin.operations.fullSync();
-        });
+		plugin.addRibbonIcon("arrow-down-up", "Check and Sync with SmartSync", async () => {
+			await plugin.operations.check();
+			await plugin.operations.sync();
+		});
 
-        plugin.addRibbonIcon("settings-2", "Open SmartSync Control Panel", () => {
-            plugin.displayModal();
-        });
-    }
+		plugin.addRibbonIcon("settings-2", "Open SmartSync Control Panel", () => {
+			plugin.displayModal();
+		});
+	}
 
-    try {
-        plugin.prevData = JSON.parse(await plugin.app.vault.adapter.read(plugin.prevPath));
-        // prevData.date = new Date(prevData.date)
-        // plugin.prevData = prevData
+	try {
+		plugin.prevData = JSON.parse(await plugin.app.vault.adapter.read(plugin.prevPath));
+		// prevData.date = new Date(prevData.date)
+		// plugin.prevData = prevData
 
-        plugin.log("PREVDATA LOADED: ", plugin.prevData);
-    } catch (error) {
-        plugin.prevData = {
-            error: true,
-            files: {},
-            except: {},
-            timestamps: {
-                prevdataUpdate: Date.now(),
-                lastFullSync: 0,
-                lastFileSync: 0,
-            },
-        };
+		plugin.log("PREVDATA LOADED: ", plugin.prevData);
+	} catch (error) {
+		plugin.prevData = {
+			error: true,
+			files: {},
+			except: {},
+			timestamps: {
+				prevdataUpdate: Date.now(),
+				lastFullSync: 0,
+				lastFileSync: 0,
+			},
+		};
 
-        plugin.app.vault.adapter.write(plugin.prevPath, JSON.stringify(plugin.prevData, null, 2));
-        console.error("ERROR LOADING PREVIOUS DATA! RESET prevdata.json to {error: true, files: {}} \n", error);
-        plugin.show("Failed to read previous data\nThis is to be expected if the plugin is new", 5000);
-    }
+		plugin.app.vault.adapter.write(plugin.prevPath, JSON.stringify(plugin.prevData, null, 2));
+		console.error("ERROR LOADING PREVIOUS DATA! RESET prevdata.json to {error: true, files: {}} \n", error);
+		plugin.show("Failed to read previous data\nThis is to be expected if the plugin is new", 5000);
+	}
 
-    // plugin adds a status bar item to the bottom of the app. Does not work on mobile apps.
+	// plugin adds a status bar item to the bottom of the app. Does not work on mobile apps.
 
-    plugin.loadingTotal = -1;
+	plugin.loadingTotal = -1;
 
-    // In your main plugin class
-    plugin.statusBar = plugin.addStatusBarItem();
-    plugin.statusBar.addClass("plugin-sync"); // Main container class
-    plugin.statusBar.setAttribute("aria-label", "Uninitialized");
-    plugin.statusBar.setAttribute("data-tooltip-position", "top");
+	// In your main plugin class
+	plugin.statusBar = plugin.addStatusBarItem();
+	plugin.statusBar.addClass("plugin-sync"); // Main container class
+	plugin.statusBar.setAttribute("aria-label", "Uninitialized");
+	plugin.statusBar.setAttribute("data-tooltip-position", "top");
 
-    plugin.statusBar2 = plugin.addStatusBarItem();
-    plugin.statusBar2.setText("");
+	plugin.statusBar2 = plugin.addStatusBarItem();
+	plugin.statusBar2.setText("");
 
-    // Create inner container
-    const innerDiv = plugin.statusBar.createDiv("status-bar-item-segment");
+	// Create inner container
+	const innerDiv = plugin.statusBar.createDiv("status-bar-item-segment");
 
-    // Create span for icon
-    plugin.iconSpan = innerDiv.createSpan({
-        cls: ["status-bar-item-icon", "sync-status-icon"],
-    });
+	// Create span for icon
+	plugin.iconSpan = innerDiv.createSpan({
+		cls: ["status-bar-item-icon", "sync-status-icon"],
+	});
 
-    // Set the icon
-    setIcon(plugin.iconSpan, "refresh-cw-off");
+	// Set the icon
+	setIcon(plugin.iconSpan, "refresh-cw-off");
 
-    // Or if you need more control over the classes:
-    plugin.statusBar.addClass("status-bar-item", "plugin-sync");
+	// Or if you need more control over the classes:
+	plugin.statusBar.addClass("status-bar-item", "plugin-sync");
 
-    // Or more Obsidian-style
-    plugin.statusBar.onClickEvent(() => {
-        // Your click handler
-        plugin.displayModal();
-    });
+	// Or more Obsidian-style
+	plugin.statusBar.onClickEvent(() => {
+		// Your click handler
+		plugin.displayModal();
+	});
 
-    plugin.addCommand({
-        id: "daily-note",
-        name: "Create Daily Note with SmartSync",
-        icon: "calendar",
-        callback: async () => {
-            plugin.dailyNote.dailyNote();
-        },
-    });
+	plugin.addCommand({
+		id: "daily-note",
+		name: "Create Daily Note with SmartSync",
+		icon: "calendar",
+		callback: async () => {
+			plugin.dailyNote.dailyNote();
+		},
+	});
 
-    plugin.addCommand({
-        id: "display-modal",
-        name: "Open SmartSync Control Panel modal",
-        icon: "settings-2",
-        callback: async () => {
-            plugin.displayModal();
-        },
-    });
+	plugin.addCommand({
+		id: "display-modal",
+		name: "Open SmartSync Control Panel modal",
+		icon: "settings-2",
+		callback: async () => {
+			plugin.displayModal();
+		},
+	});
 
-    plugin.addCommand({
-        id: "check",
-        name: "Check for file changes",
-        icon: "search",
-        callback: async () => {
-            plugin.operations.check();
-            // const output = ((params: CliData) => `Done!`)({});
-        },
-    });
+	plugin.addCommand({
+		id: "check",
+		name: "Check for file changes",
+		icon: "search",
+		callback: async () => {
+			plugin.operations.check();
+		},
+	});
 
-    /*
-    plugin.addCommand({
-        id: "smartSync-push",
-        name: "Force PUSH all File changes",
-        callback: async () => {
-            plugin.operations.push();
-        },
-    });
+	plugin.addCommand({
+		id: "fullsync",
+		name: "Full Sync",
+		icon: "arrow-down-up",
+		callback: async () => {
+			await plugin.operations.sync();
+		},
+	});
 
-    plugin.addCommand({
-        id: "smartSync-pull",
-        name: "Force PULL all File changes",
-        callback: async () => {
-            plugin.operations.pull();
-        },
-    });
-    */
+	plugin.addCommand({
+		id: "check-fullsync",
+		name: "Check and Full Sync",
+		icon: "arrow-down-up",
+		callback: async () => {
+			await plugin.operations.check(false, true);
+			await plugin.operations.sync(false);
+		},
+	});
 
-    plugin.addCommand({
-        id: "fullsync",
-        name: "Full Sync",
-        icon: "arrow-down-up",
-        callback: async () => {
-            await plugin.operations.fullSync();
-        },
-    });
+	plugin.addCommand({
+		id: "save-prev",
+		name: "Save State",
+		callback: async () => {
+			plugin.saveState();
+		},
+	});
 
-    plugin.addCommand({
-        id: "check-fullsync",
-        name: "Check and Full Sync",
-        icon: "arrow-down-up",
-        callback: async () => {
-            await plugin.operations.check(false, true);
-            await plugin.operations.fullSyncSilent();
-        },
-    });
+	plugin.addCommand({
+		id: "reset-error",
+		name: "Reset Error state",
+		callback: async () => {
+			// plugin.prevData.error= false
+			plugin.setError(false);
+		},
+	});
 
-    plugin.addCommand({
-        id: "save-prev",
-        name: "Save State",
-        callback: async () => {
-            plugin.saveState();
-        },
-    });
+	plugin.addCommand({
+		id: "toggle-pause",
+		name: "Toggle Pause for all activities",
+		icon: "pause",
+		callback: () => {
+			plugin.togglePause();
+		},
+	});
 
-    plugin.addCommand({
-        id: "reset-error",
-        name: "Reset Error state",
-        callback: async () => {
-            // plugin.prevData.error= false
-            plugin.setError(false);
-        },
-    });
+	// Add abort startup sync command
+	plugin.addCommand({
+		id: "abort-start-sync",
+		name: "Abort Startup Sync",
+		callback: () => {
+			plugin.abortScheduledSync();
+		},
+	});
 
-    plugin.addCommand({
-        id: "toggle-pause",
-        name: "Toggle Pause for all activities",
-        icon: "pause",
-        callback: () => {
-            plugin.togglePause();
-        },
-    });
+	// Handle startup sync
+	if (plugin.settings.startSync.enable) {
+		const { delay, doSync, syncDelay } = plugin.settings.startSync;
+		// plugin.show(`⏰ Starting check in ${delay} seconds...`);
+		plugin.scheduledSync.checkTimeoutId = window.setTimeout(async () => {
+			// plugin.show("🔍 Starting automatic check...");
+			try {
+				await plugin.operations.check(false);
+				// plugin.show("✅ Check completed");
 
-    // Add abort startup sync command
-    plugin.addCommand({
-        id: "abort-start-sync",
-        name: "Abort Startup Sync",
-        callback: () => {
-            plugin.abortScheduledSync();
-        },
-    });
+				if (doSync) {
+					plugin.notice = new Notice(
+						`\n⏰ Starting sync in ${syncDelay} seconds... \n  Click this to abort\n `,
+						syncDelay * 1000
+					);
 
-    // Handle startup sync
-    if (plugin.settings.startSync.enable) {
-        const { delay, doSync, syncDelay } = plugin.settings.startSync;
-        // plugin.show(`⏰ Starting check in ${delay} seconds...`);
-        plugin.scheduledSync.checkTimeoutId = window.setTimeout(async () => {
-            // plugin.show("🔍 Starting automatic check...");
-            try {
-                await plugin.operations.check(false);
-                // plugin.show("✅ Check completed");
+					// plugin.notice.messageEl.setHTMLUnsafe(`
+					//     <div style="cursor: pointer; padding: 8px; border: 1px solid var(--background-modifier-border); border-radius: 4px;">
+					//         ⏰ Starting sync in ${syncDelay} seconds... (click to abort)
+					//     </div>
+					// `)
 
-                if (doSync) {
-                    plugin.notice = new Notice(`\n⏰ Starting sync in ${syncDelay} seconds... \n  Click this to abort\n `, syncDelay * 1000);
+					plugin.notice!.messageEl.onclick = (ev) => {
+						plugin.notice = new Notice("Startup Sync aborted.");
+						plugin.abortScheduledSync();
+					};
 
-                    // plugin.notice.messageEl.setHTMLUnsafe(`
-                    //     <div style="cursor: pointer; padding: 8px; border: 1px solid var(--background-modifier-border); border-radius: 4px;">
-                    //         ⏰ Starting sync in ${syncDelay} seconds... (click to abort)
-                    //     </div>
-                    // `) 
-                    
-                    plugin.notice!.messageEl.onclick = (ev)=>{
-                        plugin.notice = new Notice("Startup Sync aborted.")
-                        plugin.abortScheduledSync()
-                    }
-                    
-                    plugin.scheduledSync.syncTimeoutId = window.setTimeout(async () => {
-                        plugin.show("🔄 Starting automatic sync...");
-                        try {
-                            await plugin.operations.fullSync();
-                            plugin.show("✅ Auto-sync completed");
-                            plugin.sessionSynced = true;
-                        } catch (error) {
-                            plugin.show(`❌ Auto-sync failed: ${error}`);
-                        }
-                    }, syncDelay * 1000);
-                } else {
-                    // plugin.sessionSynced = true;
-                }
-            } catch (error) {
-                plugin.show(`❌ Check failed: ${error}`);
-            }
-        }, delay * 1000);
-    }
+					plugin.scheduledSync.syncTimeoutId = window.setTimeout(async () => {
+						plugin.show("🔄 Starting automatic sync...");
+						try {
+							await plugin.operations.sync();
+							plugin.show("✅ Auto-sync completed");
+							plugin.sessionSynced = true;
+						} catch (error) {
+							plugin.show(`❌ Auto-sync failed: ${error}`);
+						}
+					}, syncDelay * 1000);
+				} else {
+					// plugin.sessionSynced = true;
+				}
+			} catch (error) {
+				plugin.show(`❌ Check failed: ${error}`);
+			}
+		}, delay * 1000);
+	}
 
-    plugin.setStatus(Status.NONE);
-    plugin.setClient();
-
+	plugin.setStatus(Status.NONE);
+	plugin.setClient();
 }

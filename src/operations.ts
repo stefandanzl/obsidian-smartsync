@@ -2,7 +2,7 @@ import SmartSyncPlugin from "./main";
 import { SmartSyncClient } from "./smartSync";
 import { join, dirname, calcDuration, logNotice, msToSeconds } from "./util";
 import { normalizePath } from "obsidian";
-import { Controller, FileEntry, FileList, PostSync, Status, STATUS_ITEMS } from "./const";
+import { FileEntry, FileList, PostSync, Status, STATUS_ITEMS } from "./const";
 
 export class Operations {
 	newPrevDataFiles: {
@@ -566,15 +566,6 @@ export class Operations {
 		};
 	}
 
-	/**
-	 * Count how many files will be synced based on controller and file selection
-	 */
-	countSyncableFiles(controller: Controller): number {
-		return Object.values(this.plugin.fileSelection)
-			.filter((s) => s.selected)
-			.filter((s) => s.location && controller[s.location]?.[s.diffType]).length;
-	}
-
 	/*
 	 * Perform all actual file actions the user has chosen
 	 */
@@ -659,8 +650,8 @@ export class Operations {
 	 * @param show
 	 * @returns
 	 */
-	async sync(controller: Controller, show = true, postSync: PostSync = "prevSuccess") {
-		console.log("[SYNC] Starting sync, show:", show, "controller:", controller);
+	async sync(show = true, postSync: PostSync = "prevSuccess") {
+		console.log("[SYNC] Starting sync, show:", show);
 		if (this.plugin.prevData.error) {
 			console.log("[SYNC] Blocked by error state");
 			show &&
@@ -702,10 +693,7 @@ export class Operations {
 
 			this.plugin.setStatus(Status.SYNC);
 
-			// Calculate total operations needed
-			const total = this.countSyncableFiles(controller);
-
-			if (total === 0) {
+			if (Object.keys(this.plugin.fileSelection).length === 0) {
 				if (Object.keys(this.plugin.fileTrees.local.except).length > 0) {
 					show &&
 						this.plugin.show("You have file sync exceptions. Clear them in SmartSync Control Panel.", 5000);
@@ -749,97 +737,6 @@ export class Operations {
 			this.plugin.isSyncing = false;
 			this.plugin.finished();
 		}
-	}
-
-	async duplicateLocal() {
-		this.plugin.show("Duplicating local Vault ...");
-		await this.sync({
-			local: {
-				added: 1,
-				deleted: 1,
-				modified: 1,
-				except: 1,
-			},
-			remote: {
-				added: -1,
-				deleted: -1,
-				modified: -1,
-			},
-		});
-	}
-
-	async duplicateRemote() {
-		this.plugin.show("Duplicating Remote Vault ...");
-		await this.plugin.operations.sync({
-			local: {
-				added: -1,
-				deleted: -1,
-				modified: -1,
-			},
-			remote: {
-				added: 1,
-				deleted: 1,
-				modified: 1,
-				except: 1,
-			},
-		});
-	}
-
-	async push() {
-		this.sync({
-			local: {
-				added: 1,
-				deleted: 1,
-				modified: 1,
-				except: 1,
-			},
-			remote: {},
-		});
-	}
-
-	async pull() {
-		this.sync({
-			local: {},
-			remote: {
-				added: 1,
-				deleted: 1,
-				modified: 1,
-				except: 1,
-			},
-		});
-	}
-
-	async fullSync() {
-		this.sync({
-			local: {
-				added: 1,
-				deleted: 1,
-				modified: 1,
-			},
-			remote: {
-				added: 1,
-				deleted: 1,
-				modified: 1,
-			},
-		});
-	}
-
-	async fullSyncSilent() {
-		this.sync(
-			{
-				local: {
-					added: 1,
-					deleted: 1,
-					modified: 1,
-				},
-				remote: {
-					added: 1,
-					deleted: 1,
-					modified: 1,
-				},
-			},
-			false
-		);
 	}
 
 	dangerCheck() {

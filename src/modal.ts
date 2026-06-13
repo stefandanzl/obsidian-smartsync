@@ -669,7 +669,7 @@ export class FileTreeModal extends Modal {
 			new Notice("No files selected");
 			return;
 		}
-		this.plugin.operations.fullSync();
+		this.plugin.operations.sync();
 	}
 
 	private clearErrors() {
