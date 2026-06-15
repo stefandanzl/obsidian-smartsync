@@ -6,7 +6,7 @@ type SmartSync = SmartSyncPlugin;
 import { Compare } from "./compare";
 import { Checksum } from "./checksum";
 import { Operations } from "./operations";
-import { CliData, Platform, setIcon, Notice } from "obsidian";
+import { CliData, Platform, setIcon, Notice, ObsidianProtocolData } from "obsidian";
 import { Status } from "./const";
 import { DailyNoteManager } from "./dailynote";
 
@@ -202,6 +202,21 @@ export async function launcher(plugin: SmartSync) {
 			plugin.abortScheduledSync();
 		},
 	});
+
+	// 1. Prüfen, ob das originale Daily-Notes Core-Plugin AKTIVIERT ist
+	// @ts-ignore (Da interne API)
+	const isCoreDailyEnabled = plugin.app.internalPlugins?.plugins?.["daily-notes"]?.enabled;
+
+	if (!isCoreDailyEnabled) {
+		plugin.log('Core-Plugin ist deaktiviert! Klinke eigenen Handler in "obsidian://daily" ein.');
+
+		// 2. Der magische Hack: Wir registrieren den Handler direkt auf 'daily'.
+		// Obsidian erlaubt das über die offizielle API normalerweise nicht sauber,
+		// überschreibt es aber im internen Map-Objekt, wenn wir es erzwingen.
+		plugin.registerObsidianProtocolHandler("daily", (data: ObsidianProtocolData) => {
+			plugin.dailyNote.dailyNote();
+		});
+	}
 
 	// Handle startup sync
 	if (plugin.settings.startSync.enable) {
