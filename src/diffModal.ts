@@ -7,12 +7,15 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { keymap, lineNumbers, drawSelection } from "@codemirror/view";
 import SmartSyncPlugin from "./main";
 import { Location } from "./const";
+import { msToSeconds } from "./util";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { tags } from "@lezer/highlight";
 
 export class DiffModal extends Modal {
 	mergeView: MergeView | undefined;
 	loading = true;
+	localMtime: number | null = null; // seconds since epoch
+	remoteMtime: number | null = null; // seconds since epoch
 
 	constructor(
 		app: App,
@@ -36,11 +39,17 @@ export class DiffModal extends Modal {
 		});
 
 		try {
-			// Fetch both local and remote content
-			const [localContent, remoteContent] = await Promise.all([
+			// Fetch both local and remote content (plus the local file's mtime)
+			const [localContent, remoteContent, localStat] = await Promise.all([
 				this.fetchLocalContent(),
 				this.fetchRemoteContent(),
+				this.app.vault.adapter.stat(this.filePath).catch(() => null),
 			]);
+
+			// Local mtime is reported in ms; store it in seconds to match FileEntry.mtime
+			this.localMtime = localStat ? msToSeconds(localStat.mtime) : null;
+			// Remote mtime comes from the last check's hash tree (already in seconds)
+			this.remoteMtime = this.plugin.allFiles?.remote?.[this.filePath]?.mtime ?? null;
 
 			this.loading = false;
 			contentEl.empty();
@@ -63,6 +72,18 @@ export class DiffModal extends Modal {
 			});
 			console.error("Diff error:", error);
 		}
+	}
+
+	/** Format an epoch-seconds timestamp as a local date/time string. */
+	private formatDate(seconds: number | null): string {
+		if (!seconds) return "—";
+		return new Date(seconds * 1000).toLocaleString(undefined, {
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+		});
 	}
 
 	private async fetchLocalContent(): Promise<string | null> {
@@ -94,24 +115,26 @@ export class DiffModal extends Modal {
 
 	private createMergeView(localContent: string, remoteContent: string) {
 		const { contentEl } = this;
-		// Determine label order based on location
-		const [leftLabel, rightLabel] =
+		// Determine label/date order based on location
+		const localDate = this.formatDate(this.localMtime);
+		const remoteDate = this.formatDate(this.remoteMtime);
+		const [leftLabel, rightLabel, leftDate, rightDate] =
 			this.location === "local"
-				? ["Remote", "Local"] // local is new → goes right
-				: ["Local", "Remote"]; // remote is new → goes right
+				? ["Remote", "Local", remoteDate, localDate] // local is new → goes right
+				: ["Local", "Remote", localDate, remoteDate]; // remote is new → goes right
 
 		// Add header showing which side is which
 		const header = contentEl.createDiv({
 			cls: "smart-sync-diff-header",
 		});
-		header.createSpan({
-			cls: "smart-sync-diff-header-left",
-			text: leftLabel,
-		});
-		header.createSpan({
-			cls: "smart-sync-diff-header-right",
-			text: rightLabel,
-		});
+
+		const leftEl = header.createSpan({ cls: "smart-sync-diff-header-left" });
+		leftEl.createSpan({ cls: "smart-sync-diff-header-label", text: leftLabel });
+		leftEl.createSpan({ cls: "smart-sync-diff-header-date", text: leftDate });
+
+		const rightEl = header.createSpan({ cls: "smart-sync-diff-header-right" });
+		rightEl.createSpan({ cls: "smart-sync-diff-header-label", text: rightLabel });
+		rightEl.createSpan({ cls: "smart-sync-diff-header-date", text: rightDate });
 
 		// Basic extensions for both editors
 		const basicExtensions = [

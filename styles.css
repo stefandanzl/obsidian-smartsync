@@ -477,21 +477,36 @@
 	max-width: 1800px;
 	height: 90vh;
 	max-height: 900px;
+	overflow: hidden;
+}
+
+/* Fill the modal and let the merge container be the only scroller */
+.smart-sync-diff-modal .modal-content {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
 }
 
 .smart-sync-diff-header {
 	display: flex;
-	padding: 12px 20px;
+	/* padding: 12px 20px; */
 	background: var(--background-secondary);
 	border-bottom: 1px solid var(--background-modifier-border);
 	font-size: var(--font-ui-large);
 	font-weight: var(--font-semibold);
+	flex-shrink: 0;
 }
 
 .smart-sync-diff-header-right,
 .smart-sync-diff-header-left {
 	flex: 1;
-	text-align: center;
+	display: flex;
+	flex-direction: row;
+	align-items: baseline;
+	gap: 2px;
+	justify-content: center;
 }
 
 .smart-sync-diff-header-right {
@@ -502,14 +517,28 @@
 	color: var(--color-green);
 }
 
+.smart-sync-diff-header-date {
+	color: var(--text-muted);
+	font-size: 15px;
+	/* font-size: var(--font-ui-smaller); */
+	font-weight: var(--font-normal);
+	padding: 0 0 0 50px;
+}
+
 .smart-sync-merge-view-container {
-	height: calc(100% - 50px);
+	flex: 1;
+	min-height: 0;
 	overflow: auto;
 }
 
 .smart-sync-merge-view-container .cm-editor {
-	height: 100%;
+	height: auto;
 	font-size: var(--font-ui-small);
+}
+
+/* Editors grow to content; the container above does the scrolling */
+.smart-sync-merge-view-container .cm-scroller {
+	overflow: visible;
 }
 
 .smart-sync-merge-view-container .cm-merge-view {
@@ -576,7 +605,7 @@
 }
 
 .smart-sync-file-info {
-	padding: 12px 20px;
+	/* padding: 12px 20px; */
 	margin: 12px 0;
 	background: var(--background-modifier-subtle);
 	border-radius: 8px;
