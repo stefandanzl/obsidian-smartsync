@@ -76,7 +76,6 @@ export class Operations {
 			await this.ensureLocalDirectory(dirname(filePath));
 			await this.plugin.app.vault.adapter.writeBinary(filePath, fileData.data);
 			this.plugin.processed();
-			// Store FileEntry instead of just path
 			this.newPrevDataFiles.modifiedAdded[filePath] = fileEntry;
 			return true;
 		} catch (error) {
@@ -143,7 +142,6 @@ export class Operations {
 
 			if (await this.plugin.smartSyncClient.uploadFile(filePath, fileContent)) {
 				this.plugin.processed();
-				// Store FileEntry instead of just path
 				this.newPrevDataFiles.modifiedAdded[filePath] = fileEntry;
 				this.plugin.log(`Uploaded: ${filePath}`);
 			}
@@ -256,7 +254,7 @@ export class Operations {
 			this.newPrevDataFiles.deleted[filePath] = fileEntry;
 		} catch (error) {
 			console.error(`Error deleting local file ${filePath}:`, error);
-			this.newPrevDataFiles.modifiedAdded[filePath] = fileEntry;
+			this.newPrevDataFiles.failed[filePath] = fileEntry;
 		}
 	}
 
@@ -509,32 +507,40 @@ export class Operations {
 
 	async prevSuccess() {
 		for (const [filePath, fileEntry] of Object.entries(this.newPrevDataFiles.modifiedAdded)) {
-			const stat = await this.plugin.app.vault.adapter.stat(filePath);
-			if (!stat || !fileEntry.hash) {
-				console.error("No current local file stat or pre-sync hash available");
-				continue;
+			try {
+				if (!fileEntry) {
+					console.error(`fileEntry is undefined for path: ${filePath}`);
+					continue;
+				}
+
+				const stat = await this.plugin.app.vault.adapter.stat(filePath);
+				if (!stat || !fileEntry.hash) {
+					console.error("No current local file stat or pre-sync hash available");
+					continue;
+				}
+				if (stat.size !== fileEntry.size) {
+					console.error("Post Sync stat and pre-sync size are different for file ", filePath);
+					continue;
+				}
+				this.plugin.prevData.files[filePath] = {
+					hash: fileEntry.hash,
+					size: stat.size,
+					mtime: msToSeconds(stat.mtime),
+				};
+			} catch (error) {
+				console.error(`Error processing file ${filePath} in prevSuccess:`, error);
+				this.plugin.show(`Error processing file ${filePath} in prevSuccess:`, error);
 			}
-			if (stat.size !== fileEntry.size) {
-				console.error("Post Sync stat and pre-sync size are different for file ", filePath);
-				continue;
-			}
-			this.plugin.prevData.files[filePath] = {
-				hash: fileEntry.hash,
-				size: stat.size,
-				mtime: msToSeconds(stat.mtime),
-			};
 		}
 		for (const filePath in this.newPrevDataFiles.deleted) {
 			delete this.plugin.prevData.files[filePath];
 		}
 
-		// Combine synced files for cleanup
 		const allSyncedFiles = {
 			...this.newPrevDataFiles.modifiedAdded,
 			...this.newPrevDataFiles.deleted,
 		};
 
-		// Single cleanup loop
 		for (const filePath of Object.keys(allSyncedFiles)) {
 			if (this.plugin.fileTrees) {
 				delete this.plugin.fileTrees.local.added[filePath];
@@ -555,7 +561,6 @@ export class Operations {
 			}
 		}
 
-		// Warning for failed files
 		if (Object.keys(this.newPrevDataFiles.failed).length > 0) {
 			this.plugin.show(`Warning: ${Object.keys(this.newPrevDataFiles.failed).length} files failed to sync`, 5000);
 			this.plugin.log(this.newPrevDataFiles.failed);
