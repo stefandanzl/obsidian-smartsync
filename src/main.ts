@@ -203,21 +203,25 @@ export default class SmartSync extends Plugin {
 		}
 	}
 
-	async errorWrite() {
-		// this.prevData.error = true;
-		this.setError(true);
-		this.app.vault.adapter.write(this.prevPath, JSON.stringify(this.prevData, null, 2));
-	}
+	async setError() {
+		this.prevData.error = true;
 
-	async setError(error: boolean) {
 		console.error("Error detected and saved to prevData");
 		this.show("Error detected and saved to prevData!");
-		this.prevData.error = error;
-		if (error) {
-			this.setStatus(Status.ERROR);
+		this.setStatus(Status.ERROR);
+		// Stop modsync from reacting to vault changes while in error state
+		this.modSyncListener?.unregisterEventListeners();
+		await this.savePrevData();
+	}
+
+	async clearError() {
+		this.prevData.error = false;
+		this.setStatus(Status.NONE);
+		new Notice("Error states cleared");
+		if (this.settings.modSync) {
+			this.modSyncListener?.registerEventListeners();
 		}
-		// this.setStatus("")
-		this.app.vault.adapter.write(this.prevPath, JSON.stringify(this.prevData, null, 2));
+		await this.savePrevData();
 	}
 
 	// default true in order for except to be updated
@@ -268,12 +272,11 @@ export default class SmartSync extends Plugin {
 				await this.app.vault.adapter.write(this.prevPath, JSON.stringify(this.prevData, null, 2));
 				console.log("saving successful!");
 				this.show("Saved current vault state!");
+				this.setStatus(Status.NONE);
 			} catch (error) {
 				console.log("Error occurred while saving State. ", error);
-				this.setError(true);
+				this.setError();
 				return error;
-			} finally {
-				this.setStatus(Status.NONE);
 			}
 		} else {
 			this.show(`Saving not possible because of ${this.status} \nplease clear Error in Control Panel`);

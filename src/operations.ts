@@ -304,7 +304,7 @@ export class Operations {
 			show && this.plugin.show(`SmartSync connection test failed. Error: ${error}`);
 			console.error("Failed miserably", error);
 			this.plugin.setStatus(Status.ERROR);
-			this.plugin.setError(true);
+			this.plugin.setError();
 			return false;
 		}
 	}
@@ -445,7 +445,7 @@ export class Operations {
 		} catch (error) {
 			console.error("CHECK ERROR: ", error);
 			show && this.plugin.show(`CHECK ERROR: ${error}`);
-			this.plugin.setError(true);
+			this.plugin.setError();
 			response ? this.plugin.setStatus(Status.ERROR) : this.plugin.setStatus(Status.OFFLINE);
 			throw error;
 		}
@@ -743,7 +743,7 @@ export class Operations {
 		} catch (error) {
 			console.error("SYNC", error);
 			show && this.plugin.show(`SYNC Error: ${error}`);
-			this.plugin.setError(true);
+			this.plugin.setError();
 			this.plugin.setStatus(Status.ERROR);
 		} finally {
 			this.plugin.isSyncing = false;
@@ -761,7 +761,7 @@ export class Operations {
 			}
 		});
 		if (counter > max) {
-			this.plugin.errorWrite();
+			this.plugin.setError();
 			this.plugin.show(`WARNING! DANGEROUS AMOUNT OF SYSTEM FILES HAVE PENDING DELETION (${counter})`, 5000);
 			this.plugin.setStatus(Status.ERROR);
 			return false;

@@ -104,7 +104,7 @@ export class FileTreeModal extends Modal {
 				item
 					.setTitle("Clear Error States")
 					.setIcon("octagon-x")
-					.onClick(() => this.clearErrors())
+					.onClick(() => this.plugin.clearError())
 			);
 			menu.addItem((item) =>
 				item
@@ -671,12 +671,6 @@ export class FileTreeModal extends Modal {
 			return;
 		}
 		this.plugin.operations.sync();
-	}
-
-	private clearErrors() {
-		this.plugin.prevData.error = false;
-		this.plugin.setStatus(Status.NONE);
-		new Notice("Error states cleared");
 	}
 
 	private openSettings() {

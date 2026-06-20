@@ -18,6 +18,10 @@ vars:
 
 dotenv: [".env"] # Copy .env-example to .env and modify according to Obsidian setup
 
+includes:
+  smartsyncserver:
+    taskfile: ./smartsyncserver/Taskfile.yml
+    dir: ./smartsyncserver
 tasks:
   ####################################### DEVELOPMENT #######################################
   default:
@@ -28,6 +32,12 @@ tasks:
       - task: reload-app
       - task: bundle-size
       - task: date
+
+  server:
+    # dir: smartsyncserver
+    dir: ./smartsyncserver
+    cmds:
+      - cmd: task smartsyncserver:{{.CLI_ARGS}}
 
   build:
     cmds:

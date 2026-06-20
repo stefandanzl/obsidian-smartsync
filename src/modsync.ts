@@ -58,6 +58,9 @@ export class ModSyncListener {
 		raw: null,
 	};
 
+	// Tracks whether vault listeners are currently attached (idempotent register/unregister)
+	private listenersRegistered = false;
+
 	constructor(private plugin: SmartSyncPlugin) {
 		this.setupEventHandlers();
 	}
@@ -267,6 +270,12 @@ export class ModSyncListener {
 	 * Register all event listeners with Obsidian vault
 	 */
 	registerEventListeners(): void {
+		// Idempotent: never stack duplicate handlers
+		if (this.listenersRegistered) {
+			return;
+		}
+		this.listenersRegistered = true;
+
 		const vault = this.plugin.app.vault;
 
 		if (this.eventHandlers.create) {
@@ -292,6 +301,12 @@ export class ModSyncListener {
 	 * Unregister all event listeners from Obsidian vault
 	 */
 	unregisterEventListeners(): void {
+		// Idempotent: nothing to do if not currently registered
+		if (!this.listenersRegistered) {
+			return;
+		}
+		this.listenersRegistered = false;
+
 		const vault = this.plugin.app.vault;
 
 		if (this.eventHandlers.create) {

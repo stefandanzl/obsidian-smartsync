@@ -181,7 +181,7 @@ export async function launcher(plugin: SmartSync) {
 		name: "Reset Error state",
 		callback: async () => {
 			// plugin.prevData.error= false
-			plugin.setError(false);
+			plugin.clearError();
 		},
 	});
 

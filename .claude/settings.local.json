@@ -5,7 +5,9 @@
       "Bash(npx tsc:*)",
       "Bash(go build *)",
       "Bash(go vet *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(go doc *)",
+      "Bash(go env *)"
     ],
     "deny": [],
     "ask": []
