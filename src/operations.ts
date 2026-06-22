@@ -389,6 +389,11 @@ export class Operations {
 			this.plugin.fileTrees = await this.plugin.compare.compareFileTrees(remote.files, local.files);
 			stats.compareTime = Date.now() - compareStart;
 
+			// Reconcile prevData with verified state: record files that are in sync on
+			// both sides (keeps prevData complete) and drop entries deleted on both sides.
+			// Pure bookkeeping — no file operations. Only writes prevData when something changed.
+			this.reconcilePrevData(local.files, remote.files);
+
 			const ok = this.dangerCheck();
 
 			// Calculate total time
@@ -432,7 +437,7 @@ export class Operations {
 			if (show && ok) {
 				if (this.plugin.calcTotal(this.plugin.fileTrees.local.except) > 0) {
 					this.plugin.show(
-						"Found file sync exceptions! Open SmartSync Control Panel and either PUSH/PULL or resolve each case separately!",
+						"Found file sync exceptions! Open SmartSync Control Panel and select correct versions manually!",
 						5000
 					);
 				}
@@ -448,6 +453,46 @@ export class Operations {
 			this.plugin.setError();
 			response ? this.plugin.setStatus(Status.ERROR) : this.plugin.setStatus(Status.OFFLINE);
 			throw error;
+		}
+	}
+
+	/**
+	 * Reconcile prevData with the verified in-sync state without performing a sync.
+	 * - Record files that are matched on both sides (same hash) but missing from prevData,
+	 *   so prevData stays complete and future deletions/moves classify correctly.
+	 * - Drop prevData entries that no longer exist on either side (confirmed both-sides deletion).
+	 * Pending diffs (present on exactly one side) are left untouched.
+	 * Writes prevData only when something actually changed.
+	 */
+	private reconcilePrevData(localFiles: FileList, remoteFiles: FileList) {
+		let changed = false;
+
+		for (const [path, entry] of Object.entries(this.plugin.compare.prevDataGap)) {
+			if (!this.plugin.prevData.files[path]) {
+				this.plugin.prevData.files[path] = entry;
+				changed = true;
+			}
+			// A resolved conflict (now in sync) no longer belongs in prevData.except
+			if (path in this.plugin.prevData.except) {
+				delete this.plugin.prevData.except[path];
+				changed = true;
+			}
+		}
+
+		for (const path of Object.keys(this.plugin.prevData.files)) {
+			if (!(path in localFiles) && !(path in remoteFiles)) {
+				delete this.plugin.prevData.files[path];
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			this.plugin.prevData.timestamps = {
+				...this.plugin.prevData.timestamps,
+				prevdataUpdate: msToSeconds(Date.now()),
+			};
+			this.plugin.savePrevData();
+			this.plugin.log(`> prevDataGap: ${Object.keys(this.plugin.compare.prevDataGap).length} added to prevData`);
 		}
 	}
 

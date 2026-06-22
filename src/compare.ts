@@ -6,6 +6,12 @@ export class Compare {
 	constructor(public plugin: SmartSyncPlugin) {
 		this.plugin = plugin;
 	}
+
+	// Files that are in sync on both sides (present on local + remote with identical
+	// hash) but missing from prevData.files — i.e. the gap between prevData and the
+	// true synced state. Merged into prevData after check() so it stays complete
+	// (and so future deletions/moves classify correctly). Reset every compareFileTrees run.
+	prevDataGap: FileList = {};
 	// Function to compare two file trees and find changes
 	compareFileTreesExcept(remote: FileTree, local: FileTree) {
 		// Identify added and modified files
@@ -32,8 +38,10 @@ export class Compare {
 
 			// Both are FileEntry - compare hashes
 			if (remoteValue.hash === localValue.hash) {
+				this.prevDataGap[file1] = localValue;
 				delete remote.added[file1];
 				delete local.added[file1];
+				console.log("shown as both 'added locally' and 'added remotely' but not in prevData: ", file1);
 			} else {
 				remote.except[file1] = remoteValue;
 				local.except[file1] = localValue;
@@ -53,6 +61,7 @@ export class Compare {
 			}
 			// Both are FileEntry - compare hashes
 			if (localValue.hash === remoteValue.hash) {
+				this.prevDataGap[file1] = localValue;
 				delete remote.except[file1];
 				delete local.except[file1];
 			}
@@ -187,6 +196,9 @@ export class Compare {
 	};
 
 	compareFileTrees = async (remote: FileList, local: FileList): Promise<FileTrees> => {
+		// Reset the prevData gap (in-sync files missing from prevData) for this run
+		this.prevDataGap = {};
+
 		// Initialize default file trees structure
 		const fileTreeMatch: FileTrees = {
 			remote: { added: {}, deleted: {}, modified: {}, except: {} },
