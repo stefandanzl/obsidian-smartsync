@@ -1,4 +1,4 @@
-import { App, Modal, Notice } from "obsidian";
+import { App, Modal, Notice, setIcon } from "obsidian";
 import { MergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -6,7 +6,7 @@ import { history, indentWithTab, standardKeymap } from "@codemirror/commands";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { keymap, lineNumbers, drawSelection } from "@codemirror/view";
 import SmartSyncPlugin from "./main";
-import { Location } from "./const";
+import { Location, DiffType } from "./const";
 import { msToSeconds } from "./util";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { tags } from "@lezer/highlight";
@@ -86,6 +86,30 @@ export class DiffModal extends Modal {
 		});
 	}
 
+	/** Record the chosen sync direction for this file (creates a selection entry if missing). */
+	private selectLocation(location: Location) {
+		const existing = this.plugin.fileSelection[this.filePath];
+		if (existing) {
+			existing.location = location;
+			existing.selected = true;
+		} else {
+			this.plugin.fileSelection[this.filePath] = {
+				location,
+				diffType: "except" as DiffType,
+				selected: true,
+			};
+		}
+		new Notice(`Will keep ${location} version of ${this.filePath}`);
+	}
+
+	/** Highlight the keep-button matching the currently chosen location. */
+	private refreshKeepButtons(btns: HTMLButtonElement[]) {
+		const current = this.plugin.fileSelection[this.filePath]?.location;
+		btns.forEach((b) => {
+			b.toggleClass("is-active", b.getAttribute("data-location") === current);
+		});
+	}
+
 	private async fetchLocalContent(): Promise<string | null> {
 		try {
 			if (await this.app.vault.adapter.exists(this.filePath)) {
@@ -128,13 +152,46 @@ export class DiffModal extends Modal {
 			cls: "smart-sync-diff-header",
 		});
 
-		const leftEl = header.createSpan({ cls: "smart-sync-diff-header-left" });
-		leftEl.createSpan({ cls: "smart-sync-diff-header-label", text: leftLabel });
-		leftEl.createSpan({ cls: "smart-sync-diff-header-date", text: leftDate });
+		const buildSide = (cls: string, label: string, date: string) => {
+			const sideEl = header.createDiv({ cls });
+			const info = sideEl.createDiv({ cls: "smart-sync-diff-header-info" });
+			info.createSpan({ cls: "smart-sync-diff-header-label", text: label });
+			info.createSpan({ cls: "smart-sync-diff-header-date", text: date });
+			return sideEl;
+		};
 
-		const rightEl = header.createSpan({ cls: "smart-sync-diff-header-right" });
-		rightEl.createSpan({ cls: "smart-sync-diff-header-label", text: rightLabel });
-		rightEl.createSpan({ cls: "smart-sync-diff-header-date", text: rightDate });
+		const leftEl = buildSide("smart-sync-diff-header-left", leftLabel, leftDate);
+		const rightEl = buildSide("smart-sync-diff-header-right", rightLabel, rightDate);
+
+		// "Keep <side>" buttons: pick which version to sync directly from the diff view.
+		// Only offered for conflict (exception) files. Side → Location mapping depends on
+		// which side is the "new" one (see label logic above).
+		if (this.plugin.fileSelection[this.filePath]?.diffType === "except") {
+			const [leftLocation, rightLocation]: [Location, Location] =
+				this.location === "local" ? ["remote", "local"] : ["local", "remote"];
+
+			const keepBtns: HTMLButtonElement[] = [];
+			(
+				[
+					{ el: leftEl, label: leftLabel, location: leftLocation },
+					{ el: rightEl, label: rightLabel, location: rightLocation },
+				] as const
+			).forEach(({ el, label, location: sideLocation }) => {
+				const btn = el.createEl("button", {
+					cls: "smart-sync-diff-keep-btn",
+					attr: { "aria-label": `Keep ${label} version`, "data-location": sideLocation },
+				});
+				setIcon(btn.createSpan({ cls: "smart-sync-diff-keep-btn-icon" }), "check");
+				btn.createSpan({ text: `Keep ${label}` });
+				btn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.selectLocation(sideLocation);
+					this.refreshKeepButtons(keepBtns);
+				});
+				keepBtns.push(btn);
+			});
+			this.refreshKeepButtons(keepBtns);
+		}
 
 		// Basic extensions for both editors
 		const basicExtensions = [

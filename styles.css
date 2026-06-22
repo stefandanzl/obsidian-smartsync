@@ -503,10 +503,17 @@
 .smart-sync-diff-header-left {
 	flex: 1;
 	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--size-4-2);
+}
+
+.smart-sync-diff-header-info {
+	display: flex;
 	flex-direction: row;
 	align-items: baseline;
-	gap: 2px;
-	justify-content: center;
+	gap: var(--size-4-2);
 }
 
 .smart-sync-diff-header-right {
@@ -522,7 +529,35 @@
 	font-size: 15px;
 	/* font-size: var(--font-ui-smaller); */
 	font-weight: var(--font-normal);
-	padding: 0 0 0 50px;
+}
+
+.smart-sync-diff-keep-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	cursor: pointer;
+}
+
+.smart-sync-diff-keep-btn-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.smart-sync-diff-keep-btn-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Only show the check mark for the chosen side (collapse the gap when inactive) */
+.smart-sync-diff-keep-btn:not(.is-active) .smart-sync-diff-keep-btn-icon {
+	display: none;
+}
+
+.smart-sync-diff-keep-btn.is-active {
+	color: var(--text-accent);
+	border-color: var(--interactive-accent);
 }
 
 .smart-sync-merge-view-container {

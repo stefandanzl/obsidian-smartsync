@@ -492,18 +492,27 @@ export class FileTreeModal extends Modal {
 	private renderConflictRow(container: HTMLElement, path: string) {
 		const isSelected = this.plugin.fileSelection[path]?.selected === true;
 		const row = container.createDiv({
-			cls: ["smart-sync-file-row", "smart-sync-conflict-row", isSelected ? "selected" : ""],
+			cls: ["smart-sync-file-row", "HyperMD-list-line", "smart-sync-conflict-row", isSelected ? "selected" : ""],
 			attr: { "data-path": path },
 		});
 
-		// Checkbox
-		const checkbox = row.createDiv({ cls: "smart-sync-checkbox" });
-		setIcon(checkbox, isSelected ? "square-check-big" : "square");
+		// Checkbox (real checkbox, same as regular rows)
+		const checkbox = row.createEl("input", {
+			cls: "task-list-item-checkbox",
+			type: "checkbox",
+			attr: {
+				type: "checkbox",
+				"data-task": isSelected ? "x" : " ",
+				checked: isSelected ? "" : null,
+			},
+		});
+		checkbox.checked = isSelected;
 		checkbox.addEventListener("click", (e) => {
 			e.stopPropagation();
 			this.toggleFileSelection(path);
 			const nowSelected = this.plugin.fileSelection[path]?.selected === true;
-			setIcon(checkbox, nowSelected ? "square-check-big" : "square");
+			checkbox.checked = nowSelected;
+			checkbox.setAttribute("data-task", nowSelected ? "x" : " ");
 			row.toggleClass("selected", nowSelected);
 		});
 
@@ -535,8 +544,8 @@ export class FileTreeModal extends Modal {
 		new Setting(selectWrapper).addDropdown((dropdown) => {
 			dropdown
 				.addOption("", "Choose location…")
-				.addOption("local", "⬆️ Keep Local")
-				.addOption("remote", "⬇️ Keep Remote");
+				.addOption("local", "↑ Keep Local")
+				.addOption("remote", "↓ Keep Remote");
 
 			const currentLocation = this.plugin.fileSelection[path]?.location;
 			dropdown.setValue(currentLocation ?? "");
@@ -607,12 +616,14 @@ export class FileTreeModal extends Modal {
 			);
 		}
 
-		menu.addItem((item) =>
-			item
-				.setTitle("Open in Explorer")
-				.setIcon("external-link")
-				.onClick(() => this.openInExplorer(path))
-		);
+		if (!this.plugin.mobile) {
+			menu.addItem((item) =>
+				item
+					.setTitle("Open in Explorer")
+					.setIcon("external-link")
+					.onClick(() => this.openInExplorer(path))
+			);
+		}
 		menu.addItem((item) =>
 			item
 				.setTitle("Show Diff")
