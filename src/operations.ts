@@ -651,13 +651,13 @@ export class Operations {
 					}
 				} else if (selection.diffType === "modified") {
 					if (selection.inverse) {
-						filesToDownload[filePath] = fileTrees.local.modified[filePath];
+						filesToDownload[filePath] = this.plugin.allFiles.remote[filePath];
 					} else {
 						filesToUpload[filePath] = fileTrees.local.modified[filePath];
 					}
 				} else if (selection.diffType === "deleted") {
 					if (selection.inverse) {
-						filesToDownload[filePath] = fileTrees.local.deleted[filePath];
+						filesToDownload[filePath] = this.plugin.allFiles.remote[filePath];
 					} else {
 						filesToDeleteRemote[filePath] = fileTrees.local.deleted[filePath];
 					}
@@ -665,7 +665,7 @@ export class Operations {
 					if (selection.inverse) {
 						this.plugin.log("Except file should not have inverse set to true: " + filePath);
 					}
-					filesToUpload[filePath] = fileTrees.local.except[filePath];
+					filesToUpload[filePath] = this.plugin.allFiles.local[filePath];
 				}
 			} else if (selection.location === "remote") {
 				if (selection.diffType === "added") {
@@ -676,13 +676,13 @@ export class Operations {
 					}
 				} else if (selection.diffType === "modified") {
 					if (selection.inverse) {
-						filesToUpload[filePath] = fileTrees.remote.modified[filePath];
+						filesToUpload[filePath] = this.plugin.allFiles.local[filePath];
 					} else {
 						filesToDownload[filePath] = fileTrees.remote.modified[filePath];
 					}
 				} else if (selection.diffType === "deleted") {
 					if (selection.inverse) {
-						filesToUpload[filePath] = fileTrees.remote.deleted[filePath];
+						filesToUpload[filePath] = this.plugin.allFiles.local[filePath];
 					} else {
 						filesToDeleteLocal[filePath] = fileTrees.remote.deleted[filePath];
 					}
@@ -690,7 +690,7 @@ export class Operations {
 					if (selection.inverse) {
 						this.plugin.log("Except file should not have inverse set to true: " + filePath);
 					}
-					filesToDownload[filePath] = fileTrees.remote.except[filePath];
+					filesToDownload[filePath] = this.plugin.allFiles.remote[filePath];
 				}
 			}
 		}
