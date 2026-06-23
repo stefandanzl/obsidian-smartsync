@@ -468,7 +468,10 @@ export class Operations {
 		let changed = false;
 
 		for (const [path, entry] of Object.entries(this.plugin.compare.prevDataGap)) {
-			if (!this.plugin.prevData.files[path]) {
+			const existing = this.plugin.prevData.files[path];
+			// Add missing entries, or update existing ones whose hash is stale
+			// (e.g. a file modified identically on both sides since last sync).
+			if (!existing || existing.hash !== entry.hash) {
 				this.plugin.prevData.files[path] = entry;
 				changed = true;
 			}

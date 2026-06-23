@@ -1,7 +1,7 @@
 import { Notice, TFile, WorkspaceLeaf, moment, normalizePath } from "obsidian";
 import SmartSyncPlugin from "./main";
-import { createFolderIfNotExists, logNotice } from "./util";
-import { Status } from "./const";
+import { createFolderIfNotExists, logNotice, sha256 } from "./util";
+import { FileEntry, Status } from "./const";
 import { DailyOfflineModal } from "./dailyModal";
 
 export class DailyNoteManager {
@@ -14,7 +14,8 @@ export class DailyNoteManager {
 	 */
 	async getDailyNote(
 		filePath: string,
-		remoteContent: string | undefined
+		remoteContent: string | undefined,
+		remoteFileEntry: FileEntry | undefined
 	): Promise<[file: TFile, usedTemplate?: boolean]> {
 		let finalContent = "";
 		let usedTemplate = false;
@@ -22,22 +23,25 @@ export class DailyNoteManager {
 		// Check if file exists locally
 		const existingFile = this.plugin.app.vault.getAbstractFileByPath(filePath);
 		if (existingFile instanceof TFile) {
-			const localContent = await this.plugin.app.vault.read(existingFile);
+			const localBinary = await this.plugin.app.vault.readBinary(existingFile);
+			const localHash = await sha256(localBinary);
 
 			// Use remote content if it's longer, otherwise keep local
 			// if (remoteContent && remoteContent.length > localContent.length) {
-			if (localContent === remoteContent) {
+			if (remoteFileEntry && remoteFileEntry.hash === localHash) {
 				return [existingFile];
 			}
-			if (remoteContent !== undefined) {
-				this.plugin.show("Modified Daily Note from the one on SmartSync");
-				finalContent = remoteContent;
-				// Update existing file instead of creating new one
-				await this.plugin.app.vault.modify(existingFile, finalContent);
-				return [existingFile];
-			} else {
-				return [existingFile];
+			const prevFileEntry = this.plugin.prevData.files[filePath] ?? undefined;
+			if (remoteContent !== undefined && remoteFileEntry !== undefined) {
+				if (!prevFileEntry || prevFileEntry.hash !== remoteFileEntry.hash) {
+					this.plugin.show("Updated Daily Note from SmartSync");
+					await this.plugin.app.vault.modify(existingFile, remoteContent);
+					// local now equals remote → record as the synced baseline
+					this.plugin.prevData.files[filePath] = remoteFileEntry;
+					await this.plugin.savePrevData();
+				}
 			}
+			return [existingFile];
 		}
 
 		// If file doesn't exist, use remote content or template
@@ -82,7 +86,7 @@ export class DailyNoteManager {
 		}
 
 		const templateFile = this.plugin.app.vault.getAbstractFileByPath(templatePath);
-		console.log(templateFile);
+		// console.log(templateFile);
 		if (templateFile instanceof TFile) {
 			return await this.plugin.app.vault.read(templateFile);
 		}
@@ -100,7 +104,7 @@ export class DailyNoteManager {
 
 		const filePath = normalizePath(`${folder}/${formattedDate}.md`);
 		const folderPath = filePath.split("/").slice(0, -1).join("/");
-		console.log(folderPath);
+		// console.log(folderPath);
 
 		return { filePath, folderPath };
 	}
@@ -114,11 +118,10 @@ export class DailyNoteManager {
 			const response = await this.plugin.smartSyncClient.getFile(remotePath);
 			if (response.status === 200 && response.data) {
 				return new TextDecoder().decode(response.data);
-			} else {
-				console.error("Daily Note: no connection possible");
 			}
+			console.error("Daily Note: unexpected response status", response.status);
 		} catch (error) {
-			console.log("Daily Note: Failed to fetch remote content due to connection error:", error);
+			console.error("Daily Note: failed to fetch remote content:", error);
 		}
 		return undefined;
 	}
@@ -195,12 +198,6 @@ export class DailyNoteManager {
 		}
 	}
 
-	private getDailyNotePathInfo() {
-		const folder = this.plugin.settings.dailyNotesFolder;
-		const format = this.plugin.settings.dailyNotesFormat;
-		return this.getDailyNotePath(folder, format);
-	}
-
 	/**
 	 * Main function to create/sync daily note
 	 */
@@ -221,8 +218,25 @@ export class DailyNoteManager {
 			}
 
 			// Quick connection test
-			// const connected = await this.establishConnection();
-			const connected = await this.plugin.operations.test(true, false);
+			if (!this.plugin.settings.dailyNotesFormat) {
+				new Notice("The setting 'Daily Notes Format' can not be left empty!");
+				throw new Error("setting 'daily notes format' can not be left empty");
+			}
+			const { filePath, folderPath } = this.getDailyNotePath(
+				this.plugin.settings.dailyNotesFolder,
+				this.plugin.settings.dailyNotesFormat
+			);
+
+			let connected = false;
+			let remoteFileEntry: FileEntry | undefined;
+			try {
+				const { checksums } = await this.plugin.smartSyncClient.getSelectiveChecksums([filePath]);
+				connected = true;
+				remoteFileEntry = checksums[filePath];
+			} catch (error) {
+				this.plugin.log("No connection to server");
+			}
+
 			if (!connected) {
 				if (this.plugin.dailyOfflineModal) {
 					return;
@@ -232,13 +246,13 @@ export class DailyNoteManager {
 				this.plugin.dailyOfflineModal.open();
 				return;
 			}
-
-			const { filePath, folderPath } = this.getDailyNotePathInfo();
-
 			await createFolderIfNotExists(this.plugin.app.vault, folderPath);
 
-			const remoteContent = await this.getDailyNoteRemotely(filePath);
-			const [dailyNote, usedTemplate] = await this.getDailyNote(filePath, remoteContent);
+			let remoteContent = undefined;
+			if (connected && !!remoteFileEntry) {
+				remoteContent = await this.getDailyNoteRemotely(filePath);
+			}
+			const [dailyNote, usedTemplate] = await this.getDailyNote(filePath, remoteContent, remoteFileEntry);
 
 			await this.openNoteWithTimestamp(dailyNote, middleClick, usedTemplate);
 		} catch (err) {

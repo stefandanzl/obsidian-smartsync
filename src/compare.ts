@@ -18,8 +18,12 @@ export class Compare {
 
 		for (const file1 in remote.modified) {
 			if (local.modified[file1]) {
-				remote.except[file1] = remote.modified[file1];
-				local.except[file1] = local.modified[file1];
+				if (local.modified[file1].hash === remote.modified[file1].hash) {
+					this.prevDataGap[file1] = local.modified[file1];
+				} else {
+					remote.except[file1] = remote.modified[file1];
+					local.except[file1] = local.modified[file1];
+				}
 
 				delete remote.modified[file1];
 				delete local.modified[file1];

@@ -113,7 +113,7 @@ export default class SmartSync extends Plugin {
 		// Wait for layout to be ready before registering event listeners
 		// This prevents catching startup file loading events
 		this.app.workspace.onLayoutReady(() => {
-			console.warn("🚀 [SmartSync] Layout ready - Registering ModSync listeners NOW");
+			this.log("🚀 [SmartSync] Layout ready - Registering ModSync listeners NOW");
 			setTimeout(() => {
 				// Initialize and register ModSync listeners AFTER layout is ready
 				if (this.settings.modSync) {
