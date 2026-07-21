@@ -225,6 +225,18 @@ export class SmartSyncSettingsTab extends PluginSettingTab {
                 })
             );
 
+        new Setting(containerEl)
+            .setName("Reload plugins after sync")
+            .setDesc(
+                "When a file inside an enabled plugin's folder is synced to local, reload that plugin (5s after sync) so the change takes effect. SmartSync itself is never reloaded."
+            )
+            .addToggle((toggle) =>
+                toggle.setValue(this.plugin.settings.reloadPluginsOnSync).onChange(async (value) => {
+                    this.plugin.settings.reloadPluginsOnSync = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
         // Startup Sync Section
         containerEl.createEl("h2", { text: "Startup Sync" });
         containerEl.createEl("p", {

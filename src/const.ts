@@ -202,6 +202,8 @@ export const DEFAULT_SETTINGS: Partial<SmartSyncSettings> = {
 		syncDelay: 10,
 	},
 
+	reloadPluginsOnSync: true,
+
 	debugMode: false,
 };
 
@@ -251,6 +253,8 @@ export interface SmartSyncSettings {
 	dailyNotesTimestamp: boolean;
 
 	startSync: StartSyncConfig;
+
+	reloadPluginsOnSync: boolean;
 
 	debugMode: boolean;
 }

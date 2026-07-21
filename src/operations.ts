@@ -1,8 +1,8 @@
 import SmartSyncPlugin from "./main";
 import { SmartSyncClient } from "./smartSync";
 import { join, dirname, calcDuration, logNotice, msToSeconds } from "./util";
-import { normalizePath } from "obsidian";
-import { FileEntry, FileList, PostSync, Status, STATUS_ITEMS } from "./const";
+import { normalizePath, Notice } from "obsidian";
+import { FileEntry, FileList, PLUGIN_ID, PostSync, Status, STATUS_ITEMS } from "./const";
 
 export class Operations {
 	newPrevDataFiles: {
@@ -702,6 +702,52 @@ export class Operations {
 			this.deleteFilesRemote(filesToDeleteRemote),
 			this.deleteFilesLocal(filesToDeleteLocal),
 		]);
+
+		// If any plugin-folder files were synced TO LOCAL, schedule those plugins to reload
+		// (5s after sync finishes) so the changes take effect. Gated by a setting.
+		this.schedulePluginReloads(Object.keys(filesToDownload));
+	}
+
+	/**
+	 * Finds plugin IDs among the given (downloaded) paths and, if the setting is enabled,
+	 * reloads each enabled plugin (disable → enable) after a 5s delay. Skips SmartSync itself
+	 * and any plugin that isn't currently enabled.
+	 */
+	private schedulePluginReloads(downloadedPaths: string[]): void {
+		if (!this.plugin.settings.reloadPluginsOnSync) return;
+
+		const configDir = this.plugin.app.vault.configDir;
+		const prefix = normalizePath(`${configDir}/plugins/`);
+		const ids = new Set<string>();
+		for (const p of downloadedPaths) {
+			const norm = normalizePath(p);
+			if (norm.startsWith(prefix)) {
+				const id = norm.slice(prefix.length).split("/")[0];
+				if (id) ids.add(id);
+			}
+		}
+		if (ids.size === 0) return;
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const app = this.plugin.app as any;
+		const enabledPlugins: Set<string> | undefined = app.plugins?.enabledPlugins;
+		const toReload = [...ids].filter(
+			(id) => id !== PLUGIN_ID && enabledPlugins?.has(id)
+		);
+		if (toReload.length === 0) return;
+
+		this.plugin.log(`SmartSync: scheduling reload in 5s for plugins: ${toReload.join(", ")}`);
+		setTimeout(async () => {
+			new Notice(`SmartSync: reloading plugin${toReload.length > 1 ? "s" : ""} — ${toReload.join(", ")}`);
+			for (const id of toReload) {
+				try {
+					await app.plugins.disable(id);
+					await app.plugins.enable(id);
+				} catch (error) {
+					console.error(`SmartSync: failed to reload plugin ${id}`, error);
+				}
+			}
+		}, 5000);
 	}
 
 	/**
