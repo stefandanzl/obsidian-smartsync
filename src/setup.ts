@@ -132,6 +132,15 @@ export async function launcher(plugin: SmartSync) {
 	});
 
 	plugin.addCommand({
+		id: "daily-note-tomorrow",
+		name: "Create tomorrow's Daily Note with SmartSync",
+		icon: "calendar-plus",
+		callback: async () => {
+			plugin.dailyNote.dailyNote(false, 1);
+		},
+	});
+
+	plugin.addCommand({
 		id: "display-modal",
 		name: "Open SmartSync Control Panel modal",
 		icon: "settings-2",

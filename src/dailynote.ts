@@ -97,9 +97,9 @@ export class DailyNoteManager {
 	/**
 	 * Generates the daily note path based on format and folder
 	 */
-	getDailyNotePath(folder: string, format: string) {
+	getDailyNotePath(folder: string, format: string, dayOffset = 0) {
 		//@ts-ignore
-		const momentDate = moment();
+		const momentDate = moment().add(dayOffset, "day");
 		const formattedDate = momentDate.format(format);
 
 		const filePath = normalizePath(`${folder}/${formattedDate}.md`);
@@ -199,9 +199,57 @@ export class DailyNoteManager {
 	}
 
 	/**
+	 * Runs `fn` with moment.now globally shifted to `<dayOffset> days from today at 01:23`
+	 * (symbolic placeholder time). Always restores the original moment.now afterwards.
+	 * Used so Templater/ICS plugins render the target date when a future daily note is created.
+	 */
+	private async withTimeOverride(dayOffset: number, fn: () => Promise<void>): Promise<void> {
+		//@ts-ignore
+		const target = moment().add(dayOffset, "day").startOf("day").add(1, "hour").add(23, "minute");
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const momentAny = moment as any;
+		const originalNow = momentAny.now;
+		try {
+			momentAny.now = () => target.valueOf();
+			await fn();
+		} finally {
+			momentAny.now = originalNow;
+		}
+	}
+
+	/**
+	 * Waits for Templater to finish processing templates. Registers the listener BEFORE
+	 * file creation (caller must invoke this prior to creating the file) so the event
+	 * isn't missed. If Templater isn't active, resolves after a short tick.
+	 * Resolves on the `templater:all-templates-executed` event or a 30s safety timeout.
+	 */
+	private waitForTemplater(): Promise<void> {
+		return new Promise<void>((resolve) => {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const app = this.plugin.app as any;
+			const templater = app.plugins?.getPlugin?.("templater-obsidian");
+			if (!templater) {
+				setTimeout(resolve, 50);
+				return;
+			}
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const workspace: any = this.plugin.app.workspace;
+			let done = false;
+			const handler = () => {
+				if (done) return;
+				done = true;
+				workspace.off("templater:all-templates-executed", handler);
+				resolve();
+			};
+			workspace.on("templater:all-templates-executed", handler);
+			setTimeout(handler, 30000);
+		});
+	}
+
+	/**
 	 * Main function to create/sync daily note
 	 */
-	async dailyNote(middleClick = false) {
+	async dailyNote(middleClick = false, dayOffset = 0) {
 		try {
 			// Handle offline scenarios
 			if (this.plugin.status === Status.ERROR) {
@@ -224,7 +272,8 @@ export class DailyNoteManager {
 			}
 			const { filePath, folderPath } = this.getDailyNotePath(
 				this.plugin.settings.dailyNotesFolder,
-				this.plugin.settings.dailyNotesFormat
+				this.plugin.settings.dailyNotesFormat,
+				dayOffset
 			);
 
 			let connected = false;
@@ -248,13 +297,36 @@ export class DailyNoteManager {
 			}
 			await createFolderIfNotExists(this.plugin.app.vault, folderPath);
 
-			let remoteContent = undefined;
-			if (connected && !!remoteFileEntry) {
-				remoteContent = await this.getDailyNoteRemotely(filePath);
-			}
-			const [dailyNote, usedTemplate] = await this.getDailyNote(filePath, remoteContent, remoteFileEntry);
+			const runCreation = async (): Promise<[TFile, boolean?]> => {
+				let remoteContent = undefined;
+				if (connected && !!remoteFileEntry) {
+					remoteContent = await this.getDailyNoteRemotely(filePath);
+				}
+				return this.getDailyNote(filePath, remoteContent, remoteFileEntry);
+			};
 
-			await this.openNoteWithTimestamp(dailyNote, middleClick, usedTemplate);
+			let dailyNote: TFile | undefined;
+			let usedTemplate: boolean | undefined;
+
+			if (dayOffset !== 0) {
+				// Shift moment so Templater/ICS render the target date during creation,
+				// then restore. Only wait for Templater when a NEW file is actually created
+				// (an already-existing note triggers no template execution).
+				const existedBefore = await this.plugin.app.vault.adapter.exists(filePath);
+				await this.withTimeOverride(dayOffset, async () => {
+					const templaterDone = existedBefore ? Promise.resolve() : this.waitForTemplater();
+					const result = await runCreation();
+					dailyNote = result[0];
+					usedTemplate = result[1];
+					await templaterDone;
+				});
+			} else {
+				const result = await runCreation();
+				dailyNote = result[0];
+				usedTemplate = result[1];
+			}
+
+			await this.openNoteWithTimestamp(dailyNote!, middleClick, usedTemplate);
 		} catch (err) {
 			console.error("Failed to create/open daily note:", err);
 			// logNotice(`Daily note operation failed: ${err.message}`);
