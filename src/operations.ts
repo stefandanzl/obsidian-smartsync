@@ -714,10 +714,15 @@ export class Operations {
 	 * and any plugin that isn't currently enabled.
 	 */
 	private schedulePluginReloads(downloadedPaths: string[]): void {
+		const configDir = this.plugin.app.vault.configDir;
+		const prefix = normalizePath(`${configDir}/plugins`) + "/";
+		console.log(
+			`SmartSync reload: setting=${this.plugin.settings.reloadPluginsOnSync}, ` +
+				`downloaded=${downloadedPaths.length}, prefix=${prefix}`
+		);
+		console.log(`SmartSync reload: downloaded paths sample:`, downloadedPaths.slice(0, 10));
 		if (!this.plugin.settings.reloadPluginsOnSync) return;
 
-		const configDir = this.plugin.app.vault.configDir;
-		const prefix = normalizePath(`${configDir}/plugins/`);
 		const ids = new Set<string>();
 		for (const p of downloadedPaths) {
 			const norm = normalizePath(p);
@@ -726,23 +731,24 @@ export class Operations {
 				if (id) ids.add(id);
 			}
 		}
+		console.log(`SmartSync reload: matched plugin ids:`, [...ids]);
 		if (ids.size === 0) return;
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const app = this.plugin.app as any;
 		const enabledPlugins: Set<string> | undefined = app.plugins?.enabledPlugins;
-		const toReload = [...ids].filter(
-			(id) => id !== PLUGIN_ID && enabledPlugins?.has(id)
-		);
+		console.log(enabledPlugins);
+		const toReload = [...ids].filter((id) => id !== PLUGIN_ID && enabledPlugins?.has(id));
 		if (toReload.length === 0) return;
 
 		this.plugin.log(`SmartSync: scheduling reload in 5s for plugins: ${toReload.join(", ")}`);
+		console.log(`SmartSync: scheduling reload in 5s for plugins: ${toReload.join(", ")}`);
 		setTimeout(async () => {
 			new Notice(`SmartSync: reloading plugin${toReload.length > 1 ? "s" : ""} — ${toReload.join(", ")}`);
 			for (const id of toReload) {
 				try {
-					await app.plugins.disable(id);
-					await app.plugins.enable(id);
+					await app.plugins.disablePlugin(id);
+					await app.plugins.enablePlugin(id);
 				} catch (error) {
 					console.error(`SmartSync: failed to reload plugin ${id}`, error);
 				}
